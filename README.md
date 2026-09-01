@@ -10,6 +10,11 @@ Account1 is the deterministic primary. Automatic quota-aware account fallback is
 an explicitly unfinished extension, not a feature claimed by the current clean
 path.
 
+The repository also includes **Account Fleet**, a secret-safe Herdr overlay for
+adding planned profiles, checking readiness, enabling, promoting, retiring, and
+forgetting local routing entries. It manages metadata only; vendor login and
+credential cleanup remain explicit terminal operations.
+
 ## Verification status
 
 Audited on Apple Silicon macOS 26.3 on 2026-08-31:
@@ -22,6 +27,9 @@ Audited on Apple Silicon macOS 26.3 on 2026-08-31:
   profile pairs;
 - the account wrappers preserve arguments and select their intended profile;
 - `quota-axi` returned separate profile-scoped results;
+- Herdr accepted the Account Fleet plugin manifest, its six isolated lifecycle
+  and redaction tests pass, and both primary profiles pass its sanitized live
+  readiness view from the documented NVM shell;
 - a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
   dispatch-profile regression;
 - the audit machine's primary Codex and Claude profiles are authenticated and
@@ -30,6 +38,8 @@ Audited on Apple Silicon macOS 26.3 on 2026-08-31:
 Still required before this build can claim end-to-end live routing:
 
 - authenticate Pi with interactive `/login`;
+- open Account Fleet once from inside an attached Herdr session to complete its
+  final presentation-layer check;
 - dispatch one controlled Pi, Codex, and Claude worker through the live
   coordinator;
 - implement and test automatic account fallback only after two accounts per
@@ -281,13 +291,11 @@ herdr
 ```
 
 Then, inside the desired Herdr pane, launch Pi from the FirstMate clone with the
-preferred worker profiles:
+Account Fleet's preferred worker profiles:
 
 ```sh
-cd "$HOME/src/firstmate"
-CODEX_HOME="$HOME/.codex-account1" \
-CLAUDE_CONFIG_DIR="$HOME/.claude-account1" \
-  pi
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh
 ```
 
 Inspect and approve Pi's project trust prompt for the FirstMate clone so its
@@ -378,6 +386,35 @@ See [multi-account routing](docs/multi-account-routing.md) for the sanitized
 quota matrix and router contract. See
 [account lifecycle](docs/account-lifecycle.md) for adding, independently
 verifying, retiring, archiving, reactivating, or promoting profiles.
+
+## Account Fleet UI
+
+Link the local Herdr plugin once:
+
+```sh
+cd "$HOME/src/firstmate-multi-harness"
+herdr plugin link plugins/account-fleet --enabled
+```
+
+With a Herdr workspace active, open its terminal overlay:
+
+```sh
+herdr plugin pane open \
+  --plugin firstmate.account-fleet \
+  --entrypoint accounts
+```
+
+New profiles start as `planned` and cannot become active until wrapper,
+directory, login, Herdr integration, and strict quota checks all pass. Retire
+and forget operations do not log out or delete files. See
+[Account Fleet UI](docs/account-ui.md) for controls, security boundaries, and
+verification.
+
+UI verification:
+
+```sh
+./scripts/verify-account-ui.sh
+```
 
 ## Daily usage
 

@@ -14,6 +14,11 @@ slot.
 Account numbers are local labels. They do not need to match between providers:
 you can enable Codex account2 while continuing to use only Claude account1.
 
+The supported visual workflow is [Account Fleet UI](account-ui.md). It manages
+planned/active/retired routing metadata and primary selection. This page remains
+the authoritative procedure for vendor login/logout, Herdr hook installation,
+wrapper permissions, archival, and eventual deletion.
+
 ## Verify the primary-only setup
 
 The verification scripts select `account1` for both providers by default:

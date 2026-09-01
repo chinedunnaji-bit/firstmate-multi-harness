@@ -22,6 +22,7 @@ run_check prerequisites "$script_dir/verify-prerequisites.sh"
 run_check harnesses "$script_dir/verify-harnesses.sh"
 run_check herdr-integrations "$script_dir/verify-herdr-integrations.sh"
 run_check firstmate "$script_dir/verify-firstmate.sh"
+run_check account-ui "$script_dir/verify-account-ui.sh"
 
 printf '\n== Overall summary ==\n'
 if [ "$failures" -ne 0 ]; then

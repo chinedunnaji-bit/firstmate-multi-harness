@@ -103,6 +103,30 @@ explicit, automation-safe profile selection. They set only a
 configuration-directory environment variable and then execute the real harness
 with the original argument vector.
 
+Account Fleet is the local control surface for this additional layer:
+
+```text
+                       Herdr terminal UI
+                              │
+                              ▼
+                     Account Fleet overlay
+                    sanitized registry/checks
+                              │
+                  primary / active / retired
+                              │
+               ┌──────────────┴──────────────┐
+               ▼                             ▼
+       CODEX_HOME selector          CLAUDE_CONFIG_DIR selector
+               │                             │
+               ▼                             ▼
+        FirstMate Codex worker        FirstMate Claude worker
+```
+
+The overlay is a Herdr v1 terminal-pane plugin, not a native sidebar extension.
+It never becomes a harness identifier and does not change
+`crew-dispatch.json`. `scripts/launch-firstmate.sh` consumes its primary
+selections at the coordinator boundary.
+
 Current verified boundary:
 
 - `codex1` and `claude1` are authenticated and return fresh isolated quota
@@ -113,8 +137,9 @@ Current verified boundary:
   beneath the recognized harness name.
 
 See [multi-account routing](multi-account-routing.md) for the exact status and
-the safe next architecture, and [account lifecycle](account-lifecycle.md) for
-adding or retiring profiles.
+the safe next architecture, [Account Fleet UI](account-ui.md) for the visual
+control plane, and [account lifecycle](account-lifecycle.md) for explicit
+credential/profile cleanup.
 
 ## Capacity is evidence, not an account alias
 

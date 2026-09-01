@@ -391,7 +391,31 @@ FM_BOOTSTRAP_VERBOSE_FACTS=1 \
 Expected output includes three `crew dispatch rule` facts and a
 `crew dispatch default: pi/default/medium` fact, with no `CREW_DISPATCH:` error.
 
-## 12. Run repository verification
+## 12. Link the Account Fleet Herdr UI
+
+Herdr 0.8.2 supports manifest-declared terminal plugin panes. Link this
+repository's reviewed plugin; linking registers it but does not start a pane or
+read an account:
+
+```sh
+cd "$HOME/src/firstmate-multi-harness"
+herdr plugin link plugins/account-fleet --enabled
+```
+
+Verify the registration:
+
+```sh
+herdr plugin list --plugin firstmate.account-fleet
+./scripts/verify-account-ui.sh
+```
+
+The plugin's initial in-memory default is account1 for each provider. It writes
+its sanitized registry only when a lifecycle selection changes. See
+[Account Fleet UI](account-ui.md) before adding or retiring a profile.
+
+Source: [Herdr plugins](https://herdr.dev/docs/plugins/).
+
+## 13. Run repository verification
 
 From the setup repository:
 

@@ -1,0 +1,12 @@
+id = "firstmate.account-fleet"
+name = "FirstMate Account Fleet"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Manage sanitized Codex and Claude worker-profile metadata"
+platforms = ["macos"]
+
+[[panes]]
+id = "accounts"
+title = "Account Fleet"
+placement = "overlay"
+command = ["node", "account-fleet.mjs"]

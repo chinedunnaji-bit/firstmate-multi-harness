@@ -71,6 +71,25 @@ The verification scripts:
 The one-time Claude `--allow-keychain-prompt` command is an explicit setup step,
 not part of unattended verification.
 
+## Account Fleet boundary
+
+Account Fleet is ordinary local plugin code running with the macOS user's
+permissions. Herdr does not sandbox plugins. Review
+`plugins/account-fleet/herdr-plugin.toml` and its declared Node command before
+linking it.
+
+The UI stores only local labels, lifecycle states, and primary selections. Its
+live checks discard command stdout/stderr after reducing results to booleans;
+the rendered UI and JSON snapshot never include vendor identity, quota amount,
+credential material, or raw Keychain output. Authentication remains in the
+vendor CLI.
+
+Retire and forget are routing-metadata operations. They do not log out, delete,
+archive, or overwrite profile files. This makes an accidental UI action
+recoverable but also means forgetting an entry is not credential cleanup.
+
+Source: [Herdr plugin trust and security](https://herdr.dev/docs/plugins/#trust-and-security).
+
 ## Before every public push
 
 Run from the repository root:

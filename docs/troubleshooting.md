@@ -678,3 +678,52 @@ git -C "$HOME/src/firstmate" apply --check \
 The corrected artifact applied to the audited FirstMate commit, produced files
 identical to the already-tested tree, and passed the full reverse/reapply
 lifecycle.
+
+## Account Fleet exits after adding a planned profile
+
+### Symptom
+
+An early Account Fleet build accepted the provider and account number, rendered
+the new `planned` row, and then exited with:
+
+```text
+Warning: Detected unsettled top-level await
+if (!runCommandLine(process.argv.slice(2))) await interactive();
+```
+
+### Why it happens
+
+The first implementation temporarily switched from raw key input to a Node
+`readline` prompt. Closing that prompt paused standard input. The next UI key
+read waited on a paused stream with no active event-loop handle, so Node ended
+the process and reported the unresolved top-level await.
+
+### Diagnosis
+
+Use a disposable registry so the reproduction cannot change live routing:
+
+```sh
+account_fleet_test_dir=$(mktemp -d)
+FM_ACCOUNT_FLEET_CONFIG="$account_fleet_test_dir/accounts.json" \
+  node plugins/account-fleet/account-fleet.mjs
+```
+
+Press `n`, enter a provider and account number, and confirm whether the planned
+row remains interactive.
+
+### Fix
+
+The shipped prompt cleanup explicitly resumes standard input before restoring
+raw mode. Update this setup repository. A locally linked Herdr plugin uses the
+updated working tree immediately; a GitHub-managed plugin must be reinstalled
+using Herdr's documented plugin install flow.
+
+### Verify
+
+```sh
+node --test tests/account-fleet.test.mjs
+```
+
+The fixed implementation was also exercised in an isolated PTY: `n`,
+`claude`, `2` rendered `claude account2` as planned, the UI remained active,
+and `q` exited cleanly.

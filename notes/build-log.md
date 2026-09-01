@@ -871,3 +871,139 @@ overall: one verification group failed
 An invalid label test supplied `accountx`; the Herdr verifier rejected it with
 an actionable `use default or accountN` diagnostic and a nonzero exit status.
 This prevents a typo from silently selecting an unintended directory.
+
+## 2026-09-01
+
+### Account-management visual surface
+
+Goal: provide a UI for adding, checking, promoting, retiring, and later removing
+optional Codex/Claude routing profiles without exposing credentials.
+
+Initial inspection found that FirstMate's `fm-fleet-view.sh` is a terminal
+renderer over a stable JSON fleet snapshot. It reports tasks and workers but has
+no account-administration surface. Herdr's general help describes its terminal
+workspace UI and socket API but does not list plugin commands in the top-level
+common-command summary.
+
+Direct installed help established the supported extension surface:
+
+```sh
+herdr plugin --help
+herdr plugin link --help
+herdr plugin pane open --help
+```
+
+Actual relevant result on Herdr 0.8.2:
+
+```text
+plugin link <PATH>
+plugin pane open --plugin <ID> --entrypoint <ID>
+placement values include overlay, split, tab, and zoomed
+```
+
+Herdr's versioned official plugin documentation additionally establishes that
+plugin v1 runs normal out-of-process commands with the user's permissions,
+supports manifest-declared terminal panes, and does not support native
+non-terminal plugin UI. Resolution: build Account Fleet as a Herdr terminal
+overlay rather than patching Herdr's sidebar or adding a browser credential
+service.
+
+### Account Fleet safety model
+
+The implemented registry contains only provider, local `accountN` label,
+`planned`/`active`/`retired` state, and primary selection. A new account begins
+as planned. Enabling requires five Boolean checks: wrapper, profile directory,
+vendor login status, current Herdr integration, and fresh strict quota evidence.
+
+The UI's retire and forget operations change registry metadata only. They do
+not run vendor logout, uninstall hooks, move directories, or delete files. The
+existing account-lifecycle guide remains the explicit credential cleanup path.
+
+Commands and checks implemented:
+
+```sh
+node plugins/account-fleet/account-fleet.mjs --help
+node --test tests/account-fleet.test.mjs
+bash -n scripts/launch-firstmate.sh scripts/verify-account-ui.sh
+```
+
+Actual deterministic test result before linking the plugin:
+
+```text
+6 tests, 6 passed, 0 failed
+```
+
+The fixtures deliberately emitted a fake account identity and a fake raw quota
+field. The sanitized snapshot test proved neither value nor the field name was
+retained. A disposable launcher fixture proved that primary selections changed
+the `CODEX_HOME` and `CLAUDE_CONFIG_DIR` passed to Pi while preserving its
+argument and FirstMate working directory.
+
+Herdr accepted the manifest through the installed command (the audit clone
+location is sanitized here):
+
+```sh
+herdr plugin link \
+  "$HOME/<workspace>/firstmate-multi-harness/plugins/account-fleet" \
+  --enabled
+```
+
+The returned registration identified plugin `firstmate.account-fleet`, pane
+`accounts`, and placement `overlay`. The Account Fleet executable was then run
+in an isolated PTY with a temporary registry; it rendered the two primary
+account1 rows and exited cleanly on `q`.
+
+The first interactive add-profile PTY test exposed a real input-loop bug. After
+entering `codex` and `2`, the row rendered and Node exited with:
+
+```text
+Warning: Detected unsettled top-level await
+```
+
+Root cause: closing the temporary `readline` interface paused standard input,
+leaving the next raw-key promise without an active event-loop handle. The prompt
+cleanup now calls `process.stdin.resume()` before restoring raw mode. A second
+PTY test entered `n`, `claude`, `2`; the planned row remained interactive and
+`q` exited normally.
+
+The first sandboxed `herdr plugin list --json` read returned an empty list even
+though the unrestricted link had succeeded. Repeating the list and verifier
+with normal access to Herdr's user registry proved the actual state:
+
+```text
+Account Fleet tests: pass
+FirstMate Account Fleet linked and enabled: pass
+0 failures
+```
+
+A first direct sanitized live snapshot ran under the documentation shell's
+Homebrew Node 26 environment. `command -v quota-axi` failed there, so both
+profiles correctly reported quota unavailable. The initial integration parser
+also required the line to end immediately after `current (v8)`, while actual
+Herdr status appends the installed hook path. Resolution: accept the documented
+status prefix and keep all trailing output discarded.
+
+The same live snapshot was rerun from a fresh NVM login shell (audit clone
+location sanitized):
+
+```sh
+/bin/zsh -lic 'cd "$HOME/<workspace>/firstmate-multi-harness" && \
+  node plugins/account-fleet/account-fleet.mjs --snapshot --live'
+```
+
+Sanitized actual result:
+
+```text
+Codex account1: wrapper/directory/auth/integration/quota all true
+Claude account1: wrapper/directory/auth/integration/quota all true
+```
+
+No identity, hook path, quota amount, or raw command output appeared in the
+snapshot.
+
+The current documentation-engineering shell is not itself inside Herdr
+(`HERDR_ENV` is unset). Herdr's shipped control skill explicitly forbids
+opening or inspecting a user's focused session from that context. Therefore the
+manifest and TUI are verified, while the final live `plugin pane open` overlay
+check is left as an explicit in-Herdr verification rather than falsely recorded
+as executed.

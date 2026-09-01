@@ -5,6 +5,8 @@
 In a normal terminal:
 
 ```sh
+node --version
+command -v quota-axi
 cd "$HOME/src"
 herdr
 ```
@@ -12,20 +14,42 @@ herdr
 If the default session already exists, this reattaches to it. Pane processes
 that continued running while detached remain present.
 
+Account Fleet inherits the long-lived Herdr server's `PATH`. Start a new server
+from the documented fresh NVM shell so Node and the globally installed AXI tools
+resolve from the audited Node prefix. Reattaching does not replace an existing
+server's environment.
+
 ## Start the FirstMate coordinator
 
 In the coordinator Herdr pane:
 
 ```sh
-cd "$HOME/src/firstmate"
-CODEX_HOME="$HOME/.codex-account1" \
-CLAUDE_CONFIG_DIR="$HOME/.claude-account1" \
-  pi
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh
 ```
 
 The Pi process is the coordinator because it starts from the FirstMate home.
 Starting Pi in an unrelated Git project creates a normal Pi coding session, not
 a FirstMate coordinator.
+
+The launcher reads Account Fleet's primary Codex and Claude selections, exports
+their profile selectors, and then changes to the FirstMate home before executing
+Pi. With no saved registry it deterministically uses account1 for both.
+
+## Open Account Fleet
+
+With Herdr attached, open the account overlay from another terminal:
+
+```sh
+herdr plugin pane open \
+  --plugin firstmate.account-fleet \
+  --entrypoint accounts
+```
+
+Use it to inspect Boolean readiness, plan an additional provider profile, or
+change the next coordinator launch's primary. It never changes a coordinator
+that is already running; finish or detach from that Pi process and launch a new
+one after promotion.
 
 ## Describe work
 
@@ -138,6 +162,7 @@ Use focused checks when diagnosing one layer:
 ./scripts/verify-harnesses.sh
 ./scripts/verify-herdr-integrations.sh
 ./scripts/verify-firstmate.sh
+./scripts/verify-account-ui.sh
 ```
 
 The account checks select account1 for both providers by default. To verify a
@@ -149,8 +174,9 @@ FM_VERIFY_CLAUDE_PROFILES=account1 \
   ./scripts/verify-all.sh
 ```
 
-See [account lifecycle](account-lifecycle.md) before adding, retiring, or
-promoting a profile.
+See [Account Fleet UI](account-ui.md) for the visual workflow and
+[account lifecycle](account-lifecycle.md) before logging out, archiving, or
+permanently removing local profile material.
 
 ## Update Herdr
 

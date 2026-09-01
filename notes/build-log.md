@@ -1023,3 +1023,132 @@ The overlay also rendered the documented verification, add, enable, promote,
 retire, forget, setup-command, and close controls. This completes the live
 presentation-layer check. Per-profile `v` verification remains an ordinary
 user action and does not change routing metadata.
+
+### Production FirstMate clone was missing
+
+Goal: make the requested launch action usable rather than adding a button that
+points at an absent coordinator checkout.
+
+Diagnosis:
+
+```sh
+test -d "$HOME/src/firstmate"
+test -d "$HOME/kun-agent-workspace"
+```
+
+Actual result: neither production path existed. The only available source was a
+disposable FirstMate audit clone, so `scripts/launch-firstmate.sh` would have
+stopped with its missing-directory diagnostic.
+
+Resolution actually executed (temporary source path sanitized):
+
+```sh
+git clone /private/tmp/<firstmate-audit>/firstmate "$HOME/src/firstmate"
+git -C "$HOME/src/firstmate" apply \
+  "$HOME/Documents/workspace/Job-search/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+mkdir -p "$HOME/src/firstmate/config"
+cp examples/firstmate-backend "$HOME/src/firstmate/config/backend"
+cp examples/crew-dispatch.json "$HOME/src/firstmate/config/crew-dispatch.json"
+```
+
+The installed checkout remained at the audited revision:
+
+```text
+6c1d2db194cb20e08232ba2fa2c414592f724b44
+```
+
+Verification actually executed:
+
+```sh
+FIRSTMATE_REPO="$HOME/src/firstmate" ./scripts/verify-firstmate.sh
+```
+
+Actual result: pinned revision, shell syntax, `CODEX_HOME` forwarding, Herdr
+backend, absent `crew-harness`, dynamic dispatch JSON, diff check, and bootstrap
+all passed.
+
+### Coordinator launch and Pi login controls
+
+Goal: expose the requested launch command and Pi `/login` from Account Fleet
+without creating duplicate coordinators or handling credentials in the plugin.
+
+Installed help verified these Herdr control primitives:
+
+```sh
+herdr tab create --help
+herdr pane run --help
+herdr agent list --help
+herdr agent prompt --help
+herdr agent focus --help
+```
+
+The first login shortcut attempted in an isolated empty Pi profile was:
+
+```sh
+PI_CODING_AGENT_DIR=/private/tmp/pi-login-button-test \
+  pi --no-session --no-extensions --no-context-files "/login"
+```
+
+Expected behavior: open Pi's provider-login selector.
+
+Actual useful output:
+
+```text
+Warning: No models available. Use /login to log into a provider via OAuth or API key.
+Error: No API key found for the selected model.
+```
+
+Root cause: Pi interpreted the positional string as an initial message, not an
+interactive slash command. Resolution: keep launch and login as separate UI
+actions. The launch control creates a Herdr tab and runs the existing launcher;
+the login control uses `herdr agent prompt <target> /login` only after finding
+exactly one idle/done Pi whose working directory is the FirstMate home.
+
+The plugin also refuses a second launch when that Pi already exists, and refuses
+login for missing, duplicate, working, unknown, or blocked candidates.
+
+Verification:
+
+```sh
+node --check plugins/account-fleet/account-fleet.mjs
+node --test tests/account-fleet.test.mjs
+bash -n scripts/launch-firstmate.sh scripts/verify-account-ui.sh
+```
+
+Initial deterministic result:
+
+```text
+7 tests, 7 passed, 0 failed
+```
+
+The test Herdr recorded the exact tab-create, pane-run, `/login` prompt, and
+focus calls. A live click-through remains pending in the user's attached Herdr
+workspace because this documentation shell is not the focused Herdr client.
+
+At this seven-test point, the full verifier was rerun with ordinary user-level
+access. Prerequisites, Codex account1, Claude account1, all selected Herdr
+integrations, the installed production FirstMate clone, and Account Fleet
+passed. The only remaining failure was the already-known independent Pi
+coordinator login:
+
+```text
+Pi has no configured coordinator model; start pi and use /login
+```
+
+A subsequent local PTY presentation test rendered both new action labels, then
+exposed another real defect: pressing `q` cleared the display but left stdin in
+a resumed state, so the Node process did not exit until EOF. The close path now
+explicitly pauses stdin after restoring terminal mode. A new process-level
+regression sends `q` and requires a clean exit before its two-second timeout.
+The revised deterministic result is:
+
+```text
+8 tests, 8 passed, 0 failed
+```
+
+The focused verifier was rerun after that correction. All eight tests passed,
+and Herdr reported Account Fleet linked, enabled, and at version 0.2.0:
+
+```text
+0 failures
+```

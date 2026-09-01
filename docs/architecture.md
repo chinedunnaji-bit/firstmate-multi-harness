@@ -59,6 +59,36 @@ the chosen primary harness from the FirstMate clone.
 Sources: [FirstMate repository](https://github.com/kunchenguid/firstmate),
 [FirstMate architecture](https://github.com/kunchenguid/firstmate/blob/6c1d2db194cb20e08232ba2fa2c414592f724b44/docs/architecture.md).
 
+## Which UI belongs to which layer
+
+The original one-directory workflow does not install a separate FirstMate
+dashboard. Its visible surfaces are:
+
+| Surface | What the user sees |
+| --- | --- |
+| Herdr | The mouse-first terminal workspace, tabs, panes, persistence, and agent-status presentation. |
+| Pi | The interactive coordinator conversation, slash commands such as `/login`, model selection, and trust prompts. |
+| FirstMate | Behavior loaded into Pi from the clone's `AGENTS.md`, extensions, skills, scripts, and state; no standalone app or executable. |
+| Treehouse | Worktree isolation underneath dispatched tasks; normally supervised through FirstMate rather than a separate daily UI. |
+| Account Fleet | This repository's added Herdr terminal overlay for coordinator launch/login actions and sanitized account-routing metadata. |
+
+The older quick-start layout cloned FirstMate into the same directory used to
+start Herdr and wrote `config/crew-harness=pi`, so Pi was both coordinator and
+the fixed default worker. This repository deliberately separates a setup clone
+from the production FirstMate clone, omits `crew-harness`, and installs a tested
+`crew-dispatch.json` so Pi may coordinate while Pi, Codex, or Claude runs a
+worker task.
+
+Account Fleet adds a compact action row, not a new web service:
+
+```text
+[ L  Launch FirstMate ]  [ /  Open Pi Login ]
+```
+
+The labels are activated by keyboard because Herdr plugin v1 exposes managed
+terminal panes, not a native graphical-button API. After launch, the normal
+Herdr tab and Pi screen remain the places where the user works.
+
 ## Control flow
 
 1. The user talks to Pi while Pi is running from the FirstMate clone.

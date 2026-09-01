@@ -6,7 +6,8 @@ it is not a browser service and it does not patch Herdr or FirstMate.
 
 Herdr 0.8.2 officially supports out-of-process workflow plugins and
 manifest-declared terminal panes. Native non-terminal plugin panes are not part
-of plugin v1, so a managed terminal overlay is the supported visual surface.
+of plugin v1, so a managed terminal overlay with keyboard-operated action
+buttons is the supported visual surface.
 
 Source: [Herdr plugins](https://herdr.dev/docs/plugins/).
 
@@ -83,7 +84,15 @@ credential content appeared.
 
 ## Controls
 
+The action row at the top is:
+
 ```text
+Coordinator  [ L  Launch FirstMate ]  [ /  Open Pi Login ]
+```
+
+```text
+L        verify both primary profiles and launch a coordinator tab
+/        send Pi's /login slash command to the idle coordinator
 Up/Down  select a profile
 v        verify the selected profile
 n        add a planned accountN label
@@ -94,6 +103,42 @@ x        forget a planned/retired registry entry
 c        show the exact setup commands
 q        close the overlay
 ```
+
+These are terminal-UI buttons activated by the displayed keys; Herdr plugin v1
+does not provide native mouse-clickable or browser controls.
+
+## Launch and log in to Pi
+
+Press `L`, then type `launch` at the confirmation. Account Fleet:
+
+1. refuses to run outside an active Herdr workspace;
+2. refuses to launch if a Pi agent already exists in the FirstMate home;
+3. verifies the selected primary Codex and Claude profiles;
+4. creates a `firstmate-coordinator` tab in the current Herdr workspace; and
+5. runs `./scripts/launch-firstmate.sh` from this setup repository's actual
+   checkout, with `$HOME/src/firstmate` as the default coordinator home.
+
+Close the overlay, select the new tab, and inspect Pi's project-trust prompt.
+Approve it only after confirming that Pi is running from the intended FirstMate
+clone. Wait for Pi's interactive screen to become idle.
+
+Reopen Account Fleet and press `/`. The action targets only an idle/done Pi
+agent whose working directory is exactly the configured FirstMate home, sends
+the literal `/login` slash command through Herdr, and focuses that agent. It
+refuses missing, duplicate, working, unknown, or blocked coordinator states.
+Complete the provider selection and browser authentication in Pi; Account Fleet
+never receives the credential.
+
+Launch and login are separate because the first-run trust prompt occurs before
+Pi is ready for slash commands. The apparent shortcut below was tested and
+failed:
+
+```sh
+pi "/login"
+```
+
+Pi treated the argument as an ordinary initial chat message, not as its
+interactive `/login` command. See [troubleshooting](troubleshooting.md#pi-login-does-not-open-when-passed-as-a-startup-argument).
 
 Verification retains only booleans for:
 
@@ -155,9 +200,10 @@ Run the deterministic tests and confirm the plugin is linked:
 ./scripts/verify-account-ui.sh
 ```
 
-The tests use disposable fake homes and fake harness output. They prove the
-account lifecycle, primary selection, launch environment, and redaction contract
-without touching a real vendor account.
+The eight tests use disposable fake homes and fake harness/Herdr output. They
+prove the account lifecycle, primary selection, launch environment, duplicate
+coordinator guard, exact Pi targeting, `/login` delivery, clean close, and
+redaction contract without touching a real vendor account.
 
 For a sanitized live snapshot without opening the overlay:
 

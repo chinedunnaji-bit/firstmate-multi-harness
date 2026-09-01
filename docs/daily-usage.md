@@ -21,7 +21,19 @@ server's environment.
 
 ## Start the FirstMate coordinator
 
-In the coordinator Herdr pane:
+Open Account Fleet:
+
+```sh
+herdr plugin pane open \
+  --plugin firstmate.account-fleet \
+  --entrypoint accounts
+```
+
+Press `L`, type `launch`, close the overlay, and select the new
+`firstmate-coordinator` tab. The action checks both primary profiles and refuses
+to create a duplicate coordinator.
+
+The equivalent manual fallback in a coordinator Herdr pane is:
 
 ```sh
 cd "$HOME/src/firstmate-multi-harness"
@@ -35,6 +47,11 @@ a FirstMate coordinator.
 The launcher reads Account Fleet's primary Codex and Claude selections, exports
 their profile selectors, and then changes to the FirstMate home before executing
 Pi. With no saved registry it deterministically uses account1 for both.
+
+On the first run, review Pi's project-trust prompt. Once the Pi screen is idle,
+open Account Fleet again and press `/` to send the interactive `/login` command
+and focus the coordinator tab. Provider selection and browser authentication
+still happen inside Pi.
 
 ## Open Account Fleet
 
@@ -50,6 +67,10 @@ Use it to inspect Boolean readiness, plan an additional provider profile, or
 change the next coordinator launch's primary. It never changes a coordinator
 that is already running; finish or detach from that Pi process and launch a new
 one after promotion.
+
+The labels in the overlay are keyboard-operated terminal controls, not browser
+buttons. Herdr provides the visual workspace and Pi provides the coordinator
+interface; FirstMate itself has no standalone application or command.
 
 ## Describe work
 

@@ -253,6 +253,51 @@ pi --offline --list-models
 
 Do not proceed to live FirstMate dispatch until at least one model is listed.
 
+## Pi `/login` does not open when passed as a startup argument
+
+### Symptom
+
+This attempted shortcut starts Pi but does not open the login selector:
+
+```sh
+pi "/login"
+```
+
+In an isolated empty Pi profile, the useful output was:
+
+```text
+Warning: No models available. Use /login to log into a provider via OAuth or API key.
+Error: No API key found for the selected model.
+```
+
+### Why it happens
+
+Pi treats a positional startup string as an initial user message. Interactive
+slash commands are interpreted only after the Pi interface is running.
+
+### Diagnosis
+
+`pi --help` lists initial-message arguments but no startup option that executes
+`/login` as a slash command.
+
+### Fix
+
+Launch Pi first. Resolve its project-trust prompt and wait for the interactive
+screen. Then either type `/login` inside Pi or press `/` in Account Fleet. The
+Account Fleet action uses Herdr's installed `agent prompt` interface to deliver
+the slash command only to an idle FirstMate Pi coordinator.
+
+### Verify
+
+The provider selector should appear in the coordinator tab. After completing
+the provider flow, run:
+
+```sh
+pi --offline --list-models
+```
+
+At least one usable model should be listed.
+
 ## Codex login status succeeds but quota is stale or unavailable
 
 ### Symptom

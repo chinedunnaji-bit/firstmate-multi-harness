@@ -4,10 +4,11 @@ A reproducible macOS setup for running Pi as a FirstMate coordinator, dispatchin
 Pi, Codex CLI, and Claude Code workers through Herdr, and isolating their Git
 work with Treehouse.
 
-This repository also documents three isolated accounts per commercial worker
-harness. Account 1 is the deterministic primary. Automatic quota-aware account
-fallback is an explicitly unfinished extension, not a feature claimed by the
-current clean path.
+This repository uses one isolated primary account per commercial worker harness
+and supports optional numbered accounts when they are actually available.
+Account1 is the deterministic primary. Automatic quota-aware account fallback is
+an explicitly unfinished extension, not a feature claimed by the current clean
+path.
 
 ## Verification status
 
@@ -29,11 +30,13 @@ Audited on Apple Silicon macOS 26.3 on 2026-08-31:
 Still required before this build can claim end-to-end live routing:
 
 - authenticate Pi with interactive `/login`;
-- reauthenticate the default and account2 profiles that are not quota-ready;
 - dispatch one controlled Pi, Codex, and Claude worker through the live
   coordinator;
 - implement and test automatic account fallback only after two accounts per
   provider return current capacity evidence.
+
+The default and account2 stores are optional and are not consulted by the clean
+primary-only verification path.
 
 Run the read-only checks at any time:
 
@@ -228,21 +231,21 @@ which distinguishes the observed symptom, root cause, fix, and proof.
 Authentication is interactive and happens outside this repository. Never copy
 one account's credential files into another account directory.
 
-Authenticate the three Codex profiles:
+Authenticate the Codex primary:
 
 ```sh
-CODEX_HOME="$HOME/.codex" codex login
 codex1 login
-codex2 login
 ```
 
-Authenticate the three Claude profiles:
+Authenticate the Claude primary:
 
 ```sh
-CLAUDE_CONFIG_DIR="$HOME/.claude" claude auth login
 claude1 auth login
-claude2 auth login
 ```
+
+You do not need a default, account2, or matching number of accounts across
+providers. Add optional profiles later using
+[account lifecycle](docs/account-lifecycle.md).
 
 Pi has an independent credential store. Start Pi:
 
@@ -345,13 +348,13 @@ FirstMate -> claude harness -> CLAUDE_CONFIG_DIR profile
 Real wrappers in `$HOME/.local/bin` provide explicit selection:
 
 ```text
-codex             $HOME/.codex
 codex1 preferred  $HOME/.codex-account1
-codex2 fallback   $HOME/.codex-account2
+codex optional    $HOME/.codex
+codex2 optional   $HOME/.codex-account2
 
-claude             $HOME/.claude
 claude1 preferred  $HOME/.claude-account1
-claude2 fallback   $HOME/.claude-account2
+claude optional    $HOME/.claude
+claude2 optional   $HOME/.claude-account2
 ```
 
 Do not put `codex1` or `claude1` in FirstMate dispatch JSON. They are account
@@ -367,14 +370,14 @@ Account verification:
 
 ```sh
 codex1 --version
-codex2 --version
 claude1 --version
-claude2 --version
 ./scripts/verify-harnesses.sh
 ```
 
 See [multi-account routing](docs/multi-account-routing.md) for the sanitized
-quota matrix and router contract.
+quota matrix and router contract. See
+[account lifecycle](docs/account-lifecycle.md) for adding, independently
+verifying, retiring, archiving, reactivating, or promoting profiles.
 
 ## Daily usage
 

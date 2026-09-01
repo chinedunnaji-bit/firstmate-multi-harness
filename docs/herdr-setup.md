@@ -43,17 +43,13 @@ herdr integration install pi
 Codex:
 
 ```sh
-CODEX_HOME="$HOME/.codex" herdr integration install codex
 CODEX_HOME="$HOME/.codex-account1" herdr integration install codex
-CODEX_HOME="$HOME/.codex-account2" herdr integration install codex
 ```
 
 Claude Code:
 
 ```sh
-CLAUDE_CONFIG_DIR="$HOME/.claude" herdr integration install claude
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" herdr integration install claude
-CLAUDE_CONFIG_DIR="$HOME/.claude-account2" herdr integration install claude
 ```
 
 Herdr respects `PI_CODING_AGENT_DIR`, `CODEX_HOME`, and
@@ -120,7 +116,7 @@ Expected relevant line:
 pi: current (v8) ($HOME/.pi/agent/extensions/herdr-agent-state.ts)
 ```
 
-## Verify every account pairing
+## Verify selected accounts
 
 From this setup repository:
 
@@ -128,9 +124,20 @@ From this setup repository:
 ./scripts/verify-herdr-integrations.sh
 ```
 
-The script runs `herdr integration status` under all three pairs of profile
-environment variables and reports only current/not-current status. It does not
-print the resolved profile paths or any credential data.
+The script checks Pi plus Codex account1 and Claude account1 by default. It
+reports only current/not-current status and does not print resolved profile
+paths or credential data.
+
+Select optional profiles independently when they exist:
+
+```sh
+FM_VERIFY_CODEX_PROFILES="account1 account2" \
+FM_VERIFY_CLAUDE_PROFILES=account1 \
+  ./scripts/verify-herdr-integrations.sh
+```
+
+See [account lifecycle](account-lifecycle.md) before adding or retiring a
+profile.
 
 ## Select Herdr for FirstMate
 

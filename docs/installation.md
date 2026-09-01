@@ -198,12 +198,8 @@ paths only and never copy credentials:
 install -d "$HOME/.local/bin"
 install -m 0755 "$HOME/src/firstmate-multi-harness/examples/codex1-wrapper.sh" \
   "$HOME/.local/bin/codex1"
-install -m 0755 "$HOME/src/firstmate-multi-harness/examples/codex2-wrapper.sh" \
-  "$HOME/.local/bin/codex2"
 install -m 0755 "$HOME/src/firstmate-multi-harness/examples/claude1-wrapper.sh" \
   "$HOME/.local/bin/claude1"
-install -m 0755 "$HOME/src/firstmate-multi-harness/examples/claude2-wrapper.sh" \
-  "$HOME/.local/bin/claude2"
 ```
 
 Ensure `$HOME/.local/bin` is on `PATH`. Add this after NVM setup in
@@ -217,16 +213,18 @@ Open a fresh terminal and verify argument preservation:
 
 ```sh
 codex1 --version
-codex2 --version
 claude1 --version
-claude2 --version
 ```
 
 The wrapper verification was tested from a fresh Node 22 login shell. A
 long-lived Node 20 shell selected the older globally installed harnesses, which
 is why a fresh terminal is part of the procedure.
 
-## 7. Authenticate the six worker profiles
+Account2 and later wrappers are optional. Install them only when the
+corresponding vendor account exists; see
+[account lifecycle](account-lifecycle.md).
+
+## 7. Authenticate the primary worker profiles
 
 Authentication is interactive. Never paste credentials into this repository or
 copy one profile's authentication file into another profile.
@@ -234,31 +232,21 @@ copy one profile's authentication file into another profile.
 Codex:
 
 ```sh
-CODEX_HOME="$HOME/.codex" codex login
 codex1 login
-codex2 login
 ```
 
 Claude Code:
 
 ```sh
-CLAUDE_CONFIG_DIR="$HOME/.claude" claude auth login
 claude1 auth login
-claude2 auth login
 ```
 
 Verify login status without printing account details:
 
 ```sh
-CODEX_HOME="$HOME/.codex" codex login status >/dev/null
 codex1 login status >/dev/null
-codex2 login status >/dev/null
 
-CLAUDE_CONFIG_DIR="$HOME/.claude" claude auth status --json \
-  | jq -e '.loggedIn == true' >/dev/null
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" claude auth status --json \
-  | jq -e '.loggedIn == true' >/dev/null
-CLAUDE_CONFIG_DIR="$HOME/.claude-account2" claude auth status --json \
   | jq -e '.loggedIn == true' >/dev/null
 ```
 
@@ -267,17 +255,17 @@ On macOS, Claude Code normally stores credentials in Keychain. Allow
 Claude login:
 
 ```sh
-CLAUDE_CONFIG_DIR="$HOME/.claude" \
-  quota-axi --provider claude --allow-keychain-prompt --no-credential-refresh
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" \
-  quota-axi --provider claude --allow-keychain-prompt --no-credential-refresh
-CLAUDE_CONFIG_DIR="$HOME/.claude-account2" \
   quota-axi --provider claude --allow-keychain-prompt --no-credential-refresh
 ```
 
 The `--no-credential-refresh` flag keeps these quota reads strict and
 read-only. The Keychain prompt permits reading the existing profile credential;
 it does not copy it into the repository.
+
+The default and account2 profiles are not prerequisites. The verification
+scripts select account1 only unless `FM_VERIFY_CODEX_PROFILES` or
+`FM_VERIFY_CLAUDE_PROFILES` explicitly adds another profile.
 
 ## 8. Authenticate Pi separately
 
@@ -307,7 +295,7 @@ The result must list at least one model. The failure text
 
 See [Pi setup](pi-setup.md) for provider and Node details.
 
-## 9. Install Herdr integrations for every profile
+## 9. Install Herdr integrations for the active profiles
 
 Herdr requires the Pi agent root to exist. Create only the empty directory; do
 not create or copy an authentication file:
@@ -317,43 +305,33 @@ mkdir -p "$HOME/.pi/agent"
 herdr integration install pi
 ```
 
-Install Codex and Claude integrations into each selected profile:
+Install Codex and Claude integrations into the two primary profiles:
 
 ```sh
-CODEX_HOME="$HOME/.codex" herdr integration install codex
 CODEX_HOME="$HOME/.codex-account1" herdr integration install codex
-CODEX_HOME="$HOME/.codex-account2" herdr integration install codex
 
-CLAUDE_CONFIG_DIR="$HOME/.claude" herdr integration install claude
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" herdr integration install claude
-CLAUDE_CONFIG_DIR="$HOME/.claude-account2" herdr integration install claude
 ```
 
-Verify all three profile pairs without exposing paths:
+Verify Pi and the selected account1 profiles without exposing paths:
 
 ```sh
 cd "$HOME/src/firstmate-multi-harness"
 ./scripts/verify-herdr-integrations.sh
 ```
 
-Expected audited result: Pi, Codex, and Claude are `current` for every pairing.
+Expected result: Pi, Codex account1, and Claude account1 are `current`.
 
 ## 10. Install FirstMate support hooks per profile
 
-Run each setup command for all three paired stores:
+Run each setup command for the active primary pair:
 
 ```sh
-CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude" gh-axi setup hooks
 CODEX_HOME="$HOME/.codex-account1" CLAUDE_CONFIG_DIR="$HOME/.claude-account1" gh-axi setup hooks
-CODEX_HOME="$HOME/.codex-account2" CLAUDE_CONFIG_DIR="$HOME/.claude-account2" gh-axi setup hooks
 
-CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude" chrome-devtools-axi setup hooks
 CODEX_HOME="$HOME/.codex-account1" CLAUDE_CONFIG_DIR="$HOME/.claude-account1" chrome-devtools-axi setup hooks
-CODEX_HOME="$HOME/.codex-account2" CLAUDE_CONFIG_DIR="$HOME/.claude-account2" chrome-devtools-axi setup hooks
 
-CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude" lavish-axi setup hooks
 CODEX_HOME="$HOME/.codex-account1" CLAUDE_CONFIG_DIR="$HOME/.claude-account1" lavish-axi setup hooks
-CODEX_HOME="$HOME/.codex-account2" CLAUDE_CONFIG_DIR="$HOME/.claude-account2" lavish-axi setup hooks
 ```
 
 `tasks-axi` and `quota-axi` are invoked directly by FirstMate and need no hook

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
 set -uo pipefail
+set -f
 
 failures=0
 warnings=0
+codex_profiles=${FM_VERIFY_CODEX_PROFILES:-account1}
+claude_profiles=${FM_VERIFY_CLAUDE_PROFILES:-account1}
 
 ok() {
   printf 'OK: %s\n' "$*"
@@ -17,6 +20,39 @@ warn() {
 fail() {
   failures=$((failures + 1))
   printf 'FAIL: %s\n' "$*" >&2
+}
+
+profile_dir() {
+  local provider=$1
+  local profile_label=$2
+  local account_number
+
+  case "$profile_label" in
+    default)
+      printf '%s/.%s\n' "$HOME" "$provider"
+      ;;
+    account[1-9]*)
+      account_number=${profile_label#account}
+      case "$account_number" in
+        *[!0-9]*|'') return 1 ;;
+      esac
+      printf '%s/.%s-account%s\n' "$HOME" "$provider" "$account_number"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+profile_wrapper() {
+  local provider=$1
+  local profile_label=$2
+
+  case "$profile_label" in
+    default) return 1 ;;
+    account[1-9]*) printf '%s%s\n' "$provider" "${profile_label#account}" ;;
+    *) return 1 ;;
+  esac
 }
 
 check_wrapper() {
@@ -111,11 +147,6 @@ for harness_name in pi codex claude; do
   fi
 done
 
-printf '\nAutomation-safe account wrappers\n'
-for wrapper_name in codex1 codex2 claude1 claude2; do
-  check_wrapper "$wrapper_name"
-done
-
 printf '\nPi coordinator model access\n'
 pi_models=$(pi --offline --list-models 2>&1)
 pi_models_status=$?
@@ -126,15 +157,31 @@ else
   fail "Pi has no configured coordinator model; start pi and use /login"
 fi
 
-printf '\nCodex profiles\n'
-check_codex_profile default "$HOME/.codex"
-check_codex_profile account1 "$HOME/.codex-account1"
-check_codex_profile account2 "$HOME/.codex-account2"
+printf '\nSelected Codex profiles: %s\n' "$codex_profiles"
+for profile_label in $codex_profiles; do
+  if ! selected_profile_dir=$(profile_dir codex "$profile_label"); then
+    fail "Codex profile label '$profile_label' is invalid; use default or accountN"
+    continue
+  fi
+  if [ "$profile_label" != default ]; then
+    selected_wrapper=$(profile_wrapper codex "$profile_label")
+    check_wrapper "$selected_wrapper"
+  fi
+  check_codex_profile "$profile_label" "$selected_profile_dir"
+done
 
-printf '\nClaude profiles\n'
-check_claude_profile default "$HOME/.claude"
-check_claude_profile account1 "$HOME/.claude-account1"
-check_claude_profile account2 "$HOME/.claude-account2"
+printf '\nSelected Claude profiles: %s\n' "$claude_profiles"
+for profile_label in $claude_profiles; do
+  if ! selected_profile_dir=$(profile_dir claude "$profile_label"); then
+    fail "Claude profile label '$profile_label' is invalid; use default or accountN"
+    continue
+  fi
+  if [ "$profile_label" != default ]; then
+    selected_wrapper=$(profile_wrapper claude "$profile_label")
+    check_wrapper "$selected_wrapper"
+  fi
+  check_claude_profile "$profile_label" "$selected_profile_dir"
+done
 
 printf '\nSummary\n'
 printf '%s failure(s), %s warning(s)\n' "$failures" "$warnings"

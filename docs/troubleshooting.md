@@ -263,6 +263,9 @@ output reports stale or unavailable evidence.
 This was observed for the default and account2 Codex profiles; account1
 returned fresh evidence.
 
+If you do not own the optional profile, this is not a setup failure. Leave it
+unselected; the verifier checks account1 only by default.
+
 ### Why it happens
 
 A stored-login check proves that credential state exists, not that a current
@@ -310,6 +313,9 @@ claude auth status --json
 ```
 
 with `loggedIn` false, and their strict quota checks were unavailable.
+
+If those optional accounts do not exist, do not create empty credentials or
+copy account1. Leave them out of `FM_VERIFY_CLAUDE_PROFILES`.
 
 ### Why it happens
 
@@ -391,6 +397,9 @@ Do not paste its full JSON into an issue or build log.
 `herdr integration status` reports current Codex or Claude integration under
 one profile but not another.
 
+This is a problem only when the second profile is intentionally enabled. An
+absent optional account2 hook is expected in a primary-only setup.
+
 ### Why it happens
 
 Herdr installs its hook into the selected `CODEX_HOME` or
@@ -415,7 +424,9 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-account2" herdr integration install claude
 ### Verify
 
 ```sh
-./scripts/verify-herdr-integrations.sh
+FM_VERIFY_CODEX_PROFILES="account1 account2" \
+FM_VERIFY_CLAUDE_PROFILES="account1 account2" \
+  ./scripts/verify-herdr-integrations.sh
 ```
 
 ## FirstMate rejects `codex1` in `crew-dispatch.json`

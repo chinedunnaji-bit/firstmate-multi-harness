@@ -9,16 +9,17 @@ that harness uses.
 This setup uses:
 
 ```text
-Codex default   $HOME/.codex
-Codex primary   $HOME/.codex-account1
-Codex fallback  $HOME/.codex-account2
+Codex optional default  $HOME/.codex
+Codex primary           $HOME/.codex-account1
+Codex optional account2 $HOME/.codex-account2
 
-Claude default  $HOME/.claude
-Claude primary  $HOME/.claude-account1
-Claude fallback $HOME/.claude-account2
+Claude optional default  $HOME/.claude
+Claude primary           $HOME/.claude-account1
+Claude optional account2 $HOME/.claude-account2
 ```
 
-`codex1` and `claude1` are the preferred identities.
+`codex1` and `claude1` are the preferred identities and the only required
+worker profiles. Provider profile counts are independent.
 
 These directories stay outside every Git repository. Do not copy a profile to
 create another identity; launch the corresponding CLI under an empty/new
@@ -30,11 +31,13 @@ multiple accounts side by side.
 
 Source: [Claude Code environment variables](https://code.claude.com/docs/en/env-vars).
 
-The installed Codex CLI and Herdr's current Codex integration both honor
-`CODEX_HOME`. Herdr requires the selected directory to exist before integration
+Official OpenAI documentation identifies `CODEX_HOME` as the root for
+file-backed Codex credentials, and Herdr's current Codex integration honors the
+same selector. Herdr requires the selected directory to exist before integration
 installation.
 
-Source: [Herdr Codex integration](https://herdr.dev/docs/integrations/#codex).
+Sources: [OpenAI Codex authentication](https://developers.openai.com/codex/auth#credential-storage),
+[Herdr Codex integration](https://herdr.dev/docs/integrations/#codex).
 
 ## Executable wrappers
 
@@ -45,9 +48,7 @@ real executables from this repository:
 ```sh
 install -d "$HOME/.local/bin"
 install -m 0755 examples/codex1-wrapper.sh "$HOME/.local/bin/codex1"
-install -m 0755 examples/codex2-wrapper.sh "$HOME/.local/bin/codex2"
 install -m 0755 examples/claude1-wrapper.sh "$HOME/.local/bin/claude1"
-install -m 0755 examples/claude2-wrapper.sh "$HOME/.local/bin/claude2"
 ```
 
 Each wrapper follows this pattern:
@@ -68,27 +69,25 @@ Verified from a fresh Node 22 login shell:
 
 ```sh
 codex1 --version
-codex2 --version
 claude1 --version
-claude2 --version
 ```
 
 The same wrappers invoked from a stale Node 20 shell selected the older global
 Codex and Claude installations. This is expected NVM behavior and is why the
 guide requires a fresh shell after changing the default.
 
+Fixed account2 examples and basename-driven generic wrappers are available for
+later accounts. Their tested installation and lifecycle are documented in
+[account lifecycle](account-lifecycle.md).
+
 ## Authentication
 
-Authenticate every profile independently:
+Authenticate only profiles you actually own. The minimum is:
 
 ```sh
-CODEX_HOME="$HOME/.codex" codex login
 codex1 login
-codex2 login
 
-CLAUDE_CONFIG_DIR="$HOME/.claude" claude auth login
 claude1 auth login
-claude2 auth login
 ```
 
 Never commit or print the resulting files. On macOS, Claude may store the secret
@@ -97,9 +96,7 @@ itself in Keychain while retaining profile-specific configuration on disk.
 Verify only status:
 
 ```sh
-CODEX_HOME="$HOME/.codex" codex login status >/dev/null
 codex1 login status >/dev/null
-codex2 login status >/dev/null
 
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" claude auth status --json \
   | jq -e '.loggedIn == true' >/dev/null
@@ -107,23 +104,24 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-account1" claude auth status --json \
 
 ## Herdr integration per account
 
-Herdr's hook is installed into a specific configuration directory, so repeat the
-integration installation for every profile. A current hook in one account does
-not prove another account is integrated.
+Herdr's hook is installed into a specific configuration directory, so install
+it for every active profile. A current hook in one account does not prove
+another account is integrated.
 
 ```sh
 CODEX_HOME="$HOME/.codex-account1" herdr integration install codex
 CLAUDE_CONFIG_DIR="$HOME/.claude-account1" herdr integration install claude
 ```
 
-Run the equivalent command for default and account2, then verify:
+Verify the selected account1 profiles:
 
 ```sh
 ./scripts/verify-herdr-integrations.sh
 ```
 
-All six profile hooks plus Pi reported Herdr integration revision v8 in the
-audit.
+The audit installed and checked all six possible profile hooks plus Pi, but the
+clean verifier selects only the two account1 hooks. Optional hooks do not need
+to exist until their accounts are enabled.
 
 ## Preferred account at the FirstMate boundary
 
@@ -178,8 +176,8 @@ No identity, quota amount, token, or credential content was recorded.
 
 This proves that `quota-axi` reads the selected profile separately. It also
 proves that a vendor `login status` success is not always sufficient capacity
-evidence: the two stale Codex profiles require reauthentication before they can
-participate in fallback.
+evidence. A stale profile would require reauthentication before participating
+in fallback; an account the user does not own should simply remain unselected.
 
 `quota-axi` documents Codex discovery through `$CODEX_HOME/auth.json` and Claude
 discovery through `$CLAUDE_CONFIG_DIR/.credentials.json` or a corresponding
@@ -234,3 +232,6 @@ a raw remaining percentage as a complete routing decision.
 Once secondary accounts are authenticated, implement the router behind
 `codex`/`claude`, not as new FirstMate harness identifiers, and preserve the
 primary wrappers for explicit manual selection.
+
+For the tested add, retire, archive, reactivate, promote, and selected-profile
+verification procedures, see [account lifecycle](account-lifecycle.md).

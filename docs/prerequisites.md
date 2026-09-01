@@ -116,8 +116,8 @@ Source: [NVM](https://github.com/nvm-sh/nvm).
 This repository never supplies or copies authentication. You provide:
 
 - one Pi coordinator provider login;
-- up to three isolated Codex CLI logins;
-- up to three isolated Claude Code logins;
+- one isolated Codex CLI login, with optional additional numbered profiles;
+- one isolated Claude Code login, with optional additional numbered profiles;
 - GitHub CLI authentication.
 
 Pi's current provider documentation lists ChatGPT Plus/Pro (Codex) and Claude

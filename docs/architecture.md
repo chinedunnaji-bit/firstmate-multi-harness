@@ -98,21 +98,23 @@ FirstMate profile { harness: "codex" }
      codex1   codex    codex2
 ```
 
-The four executable wrappers in `examples/` provide explicit, automation-safe
-profile selection. They set only a configuration-directory environment variable
-and then execute the real harness with the original argument vector.
+The fixed and basename-driven executable wrappers in `examples/` provide
+explicit, automation-safe profile selection. They set only a
+configuration-directory environment variable and then execute the real harness
+with the original argument vector.
 
 Current verified boundary:
 
 - `codex1` and `claude1` are authenticated and return fresh isolated quota
   evidence.
-- The default and account2 profiles are not all quota-ready.
+- The default and account2 profiles are optional and are not all quota-ready.
 - Automatic quota-aware selection across accounts is therefore not claimed as
   working yet. It requires at least two usable profiles and a tested router
   beneath the recognized harness name.
 
 See [multi-account routing](multi-account-routing.md) for the exact status and
-the safe next architecture.
+the safe next architecture, and [account lifecycle](account-lifecycle.md) for
+adding or retiring profiles.
 
 ## Capacity is evidence, not an account alias
 

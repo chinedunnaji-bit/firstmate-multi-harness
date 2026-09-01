@@ -140,6 +140,18 @@ Use focused checks when diagnosing one layer:
 ./scripts/verify-firstmate.sh
 ```
 
+The account checks select account1 for both providers by default. To verify a
+different active set without requiring unused slots:
+
+```sh
+FM_VERIFY_CODEX_PROFILES="account1 account2" \
+FM_VERIFY_CLAUDE_PROFILES=account1 \
+  ./scripts/verify-all.sh
+```
+
+See [account lifecycle](account-lifecycle.md) before adding, retiring, or
+promoting a profile.
+
 ## Update Herdr
 
 For an installation managed by Herdr's installer:

@@ -748,3 +748,126 @@ git grep -nE "$name_marker|$owner_marker" -- . \
 The branch is `main`; all intended repository files are initially untracked;
 and no publication placeholders remain outside the checker that detects them.
 No GitHub repository or remote has been created yet.
+
+### Initial milestone commits
+
+The reviewed tree was committed in five logical milestones:
+
+```text
+docs: document audited architecture and prerequisites
+feat: add multi-harness and account routing examples
+feat: preserve isolated Codex profiles in FirstMate workers
+feat: add read-only stack verification
+docs: complete reproducible installation and operations guide
+```
+
+Each staged milestone passed `git diff --cached --check` and the high-confidence
+secret-pattern scan before commit. The resulting worktree was clean, all local
+Markdown links and shell syntax passed, and `check-publication.sh` reported:
+
+```text
+0 failures, 1 review item
+```
+
+The review item was the expected generic security terminology list.
+
+### Optional-account clarification
+
+The user clarified that there are currently no usable Codex account2 or Claude
+account2 subscriptions and that those accounts may be added later.
+
+Goal: make one account per provider sufficient while retaining a reproducible
+path for adding and removing future profiles.
+
+Root cause of the previous seven harness failures: the verifier hard-coded
+default, account1, and account2 for both providers. Existing directories,
+wrappers, stored-login status, and Herdr hooks proved local state existed; they
+did not prove that the user currently owned or intended to activate every slot.
+
+Resolution:
+
+```text
+FM_VERIFY_CODEX_PROFILES defaults to account1
+FM_VERIFY_CLAUDE_PROFILES defaults to account1
+default and positive accountN labels can be selected independently
+```
+
+The Herdr verifier was changed from three fixed provider pairs to Pi plus two
+independent provider lists. The harness verifier now checks wrappers only for
+selected numbered profiles.
+
+Primary-only verification initially reported Pi login plus stale Claude1 quota
+evidence. A normal-terminal, profile-scoped `quota-axi` read with the documented
+one-time Keychain permission returned only these sanitized fields:
+
+```text
+provider=claude status=fresh stale=false reason=null
+```
+
+The immediate rerun then reported:
+
+```text
+Codex account1 auth/quota: pass
+Claude account1 auth/quota: pass
+selected Herdr integrations: pass
+Pi coordinator model: the only remaining failure
+```
+
+An independent-list negative test selected Codex account1 plus account2 while
+leaving Claude on account1. Codex account2's stale quota failed as expected;
+Claude account1 remained successful; and the selected Herdr integrations all
+passed. This proved provider counts are not coupled.
+
+### Scalable wrappers and retirement evidence
+
+Generic basename-driven wrappers were added for account3 and later. Disposable
+fake-harness tests installed them as `codex3` and `claude4` and proved:
+
+```text
+matching account directory selected: passed
+three arguments with spaces and a literal wildcard preserved: passed
+non-numbered wrapper name rejected with exit status 2: passed
+```
+
+Installed help verified:
+
+```text
+codex logout                 Remove stored authentication credentials
+claude auth logout           Log out from the Anthropic account
+herdr integration uninstall  Supports codex and claude targets
+```
+
+Official OpenAI documentation independently states that `codex logout` clears
+the selected stored credentials and that file-backed credentials live under
+`CODEX_HOME`.
+
+The documented wrapper disable/reactivate and profile archive sequence was
+exercised entirely in a disposable directory:
+
+```text
+chmod 0644 -> non-executable: passed
+chmod 0755 -> executable: passed
+move active profile to unused .retired path: passed
+active path absent and archive present: passed
+```
+
+No real account was logged out, moved, or deleted during these tests.
+
+### Primary-only full-stack verification
+
+The complete revised verifier was run from a fresh Node 22 login shell with the
+audited FirstMate clone selected. Actual result:
+
+```text
+prerequisites: pass
+Codex account1 auth/quota: pass
+Claude account1 auth/quota: pass
+Pi coordinator model: fail, /login still required
+selected Herdr integrations: pass
+FirstMate pinned revision/config/bootstrap: pass
+overall: one verification group failed
+```
+
+An invalid label test supplied `accountx`; the Herdr verifier rejected it with
+an actionable `use default or accountN` diagnostic and a nonzero exit status.
+This prevents a typo from silently selecting an unintended directory.

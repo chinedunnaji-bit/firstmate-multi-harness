@@ -1,0 +1,41 @@
+# macOS and editors
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Environment and credential files
+.env
+.env.*
+!.env.example
+auth.json
+.credentials.json
+credentials.json
+cookies.json
+cookies.txt
+*.pem
+*.p12
+*.pfx
+*.key
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Never vendor account or harness state
+.codex/
+.codex-account*/
+.claude/
+.claude-account*/
+.pi/
+.herdr/
+
+# Local runtime data and scratch output
+tmp/
+temp/
+*.log
+*.pid
+coverage/
+node_modules/

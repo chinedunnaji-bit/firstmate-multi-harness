@@ -75,10 +75,11 @@ herdr plugin pane open \
 
 The installed Herdr 0.8.2 help surface was used to verify `plugin link`,
 `plugin list`, and the `overlay` placement accepted by `plugin pane open`.
-The manifest and terminal renderer were exercised locally. The final live
-overlay open remains explicitly pending because the documentation shell was not
-inside Herdr and Herdr's own control rules forbid manipulating a user's focused
-session from outside it.
+The manifest and terminal renderer were first exercised locally. The user then
+ran the documented open command against an attached Herdr session; the live
+overlay rendered active primary `account1` rows for Codex and Claude with
+readiness initially shown as `not checked`. No identity, quota amount, or
+credential content appeared.
 
 ## Controls
 

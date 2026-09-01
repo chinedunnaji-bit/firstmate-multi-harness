@@ -1007,3 +1007,19 @@ opening or inspecting a user's focused session from that context. Therefore the
 manifest and TUI are verified, while the final live `plugin pane open` overlay
 check is left as an explicit in-Herdr verification rather than falsely recorded
 as executed.
+
+### Live Account Fleet overlay confirmation
+
+The user ran the documented `herdr plugin pane open` command from an attached
+Herdr session. Actual sanitized presentation result:
+
+```text
+Provider  Profile   State   Primary  Readiness
+codex     account1  active  yes      not checked
+claude    account1  active  yes      not checked
+```
+
+The overlay also rendered the documented verification, add, enable, promote,
+retire, forget, setup-command, and close controls. This completes the live
+presentation-layer check. Per-profile `v` verification remains an ordinary
+user action and does not change routing metadata.

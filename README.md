@@ -30,6 +30,8 @@ Audited on Apple Silicon macOS 26.3 on 2026-08-31:
 - Herdr accepted the Account Fleet plugin manifest, its six isolated lifecycle
   and redaction tests pass, and both primary profiles pass its sanitized live
   readiness view from the documented NVM shell;
+- the Account Fleet pane opened successfully as a live Herdr overlay and
+  rendered only the expected Codex/Claude account1 routing metadata;
 - a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
   dispatch-profile regression;
 - the audit machine's primary Codex and Claude profiles are authenticated and
@@ -38,8 +40,6 @@ Audited on Apple Silicon macOS 26.3 on 2026-08-31:
 Still required before this build can claim end-to-end live routing:
 
 - authenticate Pi with interactive `/login`;
-- open Account Fleet once from inside an attached Herdr session to complete its
-  final presentation-layer check;
 - dispatch one controlled Pi, Codex, and Claude worker through the live
   coordinator;
 - implement and test automatic account fallback only after two accounts per

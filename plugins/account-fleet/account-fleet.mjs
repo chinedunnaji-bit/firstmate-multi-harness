@@ -219,6 +219,39 @@ function parseJson(text) {
   }
 }
 
+function repositoryRoot() {
+  if (process.env.HERDR_PLUGIN_ROOT) {
+    return path.resolve(process.env.HERDR_PLUGIN_ROOT, "..", "..");
+  }
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+function firstmateHome() {
+  return path.resolve(
+    process.env.FM_FIRSTMATE_HOME || path.join(os.homedir(), "src", "firstmate"),
+  );
+}
+
+function portablePath(file) {
+  const home = os.homedir();
+  return file === home || file.startsWith(`${home}${path.sep}`)
+    ? `$HOME${file.slice(home.length)}`
+    : file;
+}
+
+function runHerdr(args) {
+  const herdr = process.env.HERDR_BIN_PATH || "herdr";
+  const result = safeSpawn(herdr, args);
+  if (result.status !== 0) {
+    throw new Error(`Herdr command failed: ${args.slice(0, 2).join(" ")}`);
+  }
+  const response = parseJson(result.stdout);
+  if (!response?.result) {
+    throw new Error(`Herdr returned an invalid response for ${args.slice(0, 2).join(" ")}`);
+  }
+  return response.result;
+}
+
 function verifyProfile(provider, label) {
   const paths = profilePaths(provider, label);
   const selector =
@@ -272,6 +305,102 @@ function verifyProfile(provider, label) {
     ready: Object.values(checks).every(Boolean),
     checks,
   };
+}
+
+function verifyPrimaryProfiles(registry) {
+  const failed = [];
+  for (const provider of PROVIDERS) {
+    const label = registry.providers[provider].primary;
+    const verification = verifyProfile(provider, label);
+    if (!verification.ready) failed.push(`${provider} ${label}`);
+  }
+  if (failed.length > 0) {
+    throw new Error(
+      `primary readiness failed for ${failed.join(", ")}; verify the rows before launch`,
+    );
+  }
+}
+
+function firstMatePiAgents() {
+  const coordinatorHome = firstmateHome();
+  const listed = runHerdr(["agent", "list"]);
+  return (listed.agents ?? []).filter((candidate) => {
+    const detected = String(candidate.agent ?? candidate.display_agent ?? "").toLowerCase();
+    const cwd = candidate.foreground_cwd ?? candidate.cwd;
+    return detected === "pi" && cwd && path.resolve(cwd) === coordinatorHome;
+  });
+}
+
+function launchFirstMateTab(registry) {
+  if (process.env.HERDR_ENV !== "1" || !process.env.HERDR_WORKSPACE_ID) {
+    throw new Error("launch is available only inside an active Herdr workspace");
+  }
+  if (firstMatePiAgents().length > 0) {
+    throw new Error(
+      "a FirstMate Pi coordinator already exists; select its tab instead of launching another",
+    );
+  }
+  verifyPrimaryProfiles(registry);
+
+  const setupRoot = repositoryRoot();
+  const launcher = path.join(setupRoot, "scripts", "launch-firstmate.sh");
+  const coordinatorHome = firstmateHome();
+  if (!fs.existsSync(launcher)) {
+    throw new Error("FirstMate launcher is missing from the setup repository");
+  }
+  if (!fs.existsSync(path.join(coordinatorHome, "AGENTS.md"))) {
+    throw new Error(
+      `FirstMate coordinator home is missing: ${portablePath(coordinatorHome)}`,
+    );
+  }
+
+  const created = runHerdr([
+    "tab",
+    "create",
+    "--workspace",
+    process.env.HERDR_WORKSPACE_ID,
+    "--cwd",
+    setupRoot,
+    "--label",
+    "firstmate-coordinator",
+    "--env",
+    `FM_FIRSTMATE_HOME=${coordinatorHome}`,
+    "--no-focus",
+  ]);
+  const paneId = created.root_pane?.pane_id;
+  if (!paneId) throw new Error("Herdr did not return the coordinator pane id");
+  runHerdr(["pane", "run", paneId, "./scripts/launch-firstmate.sh"]);
+  return { paneId, tabId: created.tab?.tab_id ?? null };
+}
+
+function openPiLogin() {
+  if (process.env.HERDR_ENV !== "1") {
+    throw new Error("Pi login control is available only inside Herdr");
+  }
+  const candidates = firstMatePiAgents();
+  if (candidates.length === 0) {
+    throw new Error("no FirstMate Pi coordinator found; launch it first and wait for its screen");
+  }
+  if (candidates.length > 1) {
+    throw new Error("multiple FirstMate Pi coordinators found; close duplicates before login");
+  }
+
+  const candidate = candidates[0];
+  if (candidate.agent_status === "blocked") {
+    throw new Error("Pi is blocked; open its tab and resolve the trust or approval prompt first");
+  }
+  if (!["idle", "done"].includes(candidate.agent_status)) {
+    throw new Error(`Pi is ${candidate.agent_status}; wait until it is idle before login`);
+  }
+  const target = candidate.name || candidate.pane_id;
+  runHerdr(["agent", "prompt", target, "/login"]);
+  try {
+    runHerdr(["agent", "focus", target]);
+  } catch {
+    // The login command was already delivered. A focus failure is recoverable:
+    // the user can select the coordinator tab through Herdr's normal UI.
+  }
+  return { paneId: candidate.pane_id, target };
 }
 
 function activateProfile(registry, provider, label, verification) {
@@ -364,6 +493,10 @@ function draw(registry, selected, verification, message = "") {
   output += `${ANSI.bold}${ANSI.cyan}FirstMate Account Fleet${ANSI.reset}\n`;
   output += `${ANSI.dim}Sanitized routing metadata — credential contents are never read or shown${ANSI.reset}\n`;
   output += `${rule}\n`;
+  output += `${ANSI.bold}Coordinator${ANSI.reset}  `;
+  output += `${ANSI.reverse} L  Launch FirstMate ${ANSI.reset}  `;
+  output += `${ANSI.reverse} /  Open Pi Login ${ANSI.reset}\n`;
+  output += `${rule}\n`;
   output += `${ANSI.bold}  Provider  Profile     State      Primary  Readiness${ANSI.reset}\n`;
   rows.forEach((row, index) => {
     const pointer = index === selected ? "›" : " ";
@@ -392,6 +525,7 @@ function draw(registry, selected, verification, message = "") {
   if (message) output += `${ANSI.yellow}${message}${ANSI.reset}\n`;
   output += "\n↑/↓ select   v verify   n new planned   e enable   p promote\n";
   output += "r retire     x forget registry entry   c setup commands   q close\n";
+  output += "L launch a coordinator tab            / send /login to idle coordinator\n";
   process.stdout.write(output);
 }
 
@@ -487,6 +621,23 @@ async function interactive() {
         }
       } else if (key === "c" && current) {
         await showCommands(current.provider, current.label);
+      } else if (key === "l" || key === "L") {
+        const confirmation = await promptLine(
+          "Start a new coordinator only if one is not already running. Type launch: ",
+        );
+        if (confirmation !== "launch") {
+          message = "Coordinator launch cancelled.";
+        } else {
+          message = "Verifying primary accounts and creating the coordinator tab…";
+          redraw();
+          const launched = launchFirstMateTab(registry);
+          message = `Coordinator started in ${launched.tabId ?? launched.paneId}; close this overlay and select that tab.`;
+        }
+      } else if (key === "/") {
+        message = "Locating the idle FirstMate Pi coordinator…";
+        redraw();
+        openPiLogin();
+        message = "Pi /login opened; complete authentication in the coordinator tab.";
       }
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
@@ -495,6 +646,7 @@ async function interactive() {
   }
 
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  process.stdin.pause();
   process.stdout.write(`${ANSI.clear}${ANSI.reset}`);
 }
 
@@ -559,5 +711,7 @@ export {
   setupCommands,
   validateRegistry,
   verifyProfile,
+  launchFirstMateTab,
+  openPiLogin,
   writeRegistry,
 };

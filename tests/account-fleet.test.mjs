@@ -10,6 +10,8 @@ import {
   activateProfile,
   addProfile,
   defaultRegistry,
+  launchFirstMateTab,
+  openPiLogin,
   promoteProfile,
   readRegistry,
   removeProfile,
@@ -22,11 +24,23 @@ import {
 
 function withIsolatedEnvironment(callback) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "account-fleet-test."));
-  const previous = {
-    HOME: process.env.HOME,
-    PATH: process.env.PATH,
-    FM_ACCOUNT_FLEET_CONFIG: process.env.FM_ACCOUNT_FLEET_CONFIG,
-  };
+  const environmentKeys = [
+    "HOME",
+    "PATH",
+    "FM_ACCOUNT_FLEET_CONFIG",
+    "FM_FIRSTMATE_HOME",
+    "HERDR_BIN_PATH",
+    "HERDR_ENV",
+    "HERDR_PLUGIN_ROOT",
+    "HERDR_WORKSPACE_ID",
+    "FAKE_HERDR_LOG",
+    "FM_TEST_AGENT_PRESENT",
+    "FM_TEST_AGENT_STATUS",
+    "FM_TEST_FIRSTMATE_HOME",
+  ];
+  const previous = Object.fromEntries(
+    environmentKeys.map((key) => [key, process.env[key]]),
+  );
   process.env.HOME = temporary;
   process.env.PATH = `${path.join(temporary, "bin")}:${previous.PATH ?? ""}`;
   process.env.FM_ACCOUNT_FLEET_CONFIG = path.join(temporary, "config", "accounts.json");
@@ -62,7 +76,29 @@ function installFakeTools(home) {
   executable(path.join(bin, "claude"), 'printf "%s\\n" \'{"loggedIn":true,"email":"private@example.invalid"}\'; exit 0');
   executable(
     path.join(bin, "herdr"),
-    'printf "%s\\n" "codex: current (v8) (/tmp/codex-hook)" "claude: current (v8) (/tmp/claude-hook)"; exit 0',
+    `if [ -n "\${FAKE_HERDR_LOG:-}" ]; then printf '%s\\n' "$*" >> "$FAKE_HERDR_LOG"; fi
+case "$1:$2" in
+  integration:status)
+    printf '%s\\n' "codex: current (v8) (/tmp/codex-hook)" "claude: current (v8) (/tmp/claude-hook)"
+    ;;
+  tab:create)
+    printf '%s\\n' '{"id":"test","result":{"type":"tab_created","tab":{"tab_id":"w1:t2"},"root_pane":{"pane_id":"w1:p2"}}}'
+    ;;
+  pane:run)
+    printf '%s\\n' '{"id":"test","result":{"type":"pane_command_run"}}'
+    ;;
+  agent:list)
+    if [ "\${FM_TEST_AGENT_PRESENT:-0}" = "1" ]; then
+      printf '{"id":"test","result":{"type":"agent_list","agents":[{"agent":"pi","agent_status":"%s","cwd":"%s","foreground_cwd":"%s","pane_id":"w1:p2","name":null}]}}\\n' "\${FM_TEST_AGENT_STATUS:-idle}" "$FM_TEST_FIRSTMATE_HOME" "$FM_TEST_FIRSTMATE_HOME"
+    else
+      printf '%s\\n' '{"id":"test","result":{"type":"agent_list","agents":[]}}'
+    fi
+    ;;
+  agent:prompt|agent:focus)
+    printf '%s\\n' '{"id":"test","result":{"type":"ok"}}'
+    ;;
+  *) exit 2 ;;
+esac`,
   );
   executable(
     path.join(bin, "quota-axi"),
@@ -194,5 +230,59 @@ test("the FirstMate launcher consumes the selected primary profiles", () => {
     });
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /invalid Account Fleet registry/);
+  });
+});
+
+test("Account Fleet launches a Herdr coordinator tab and targets only its Pi for login", () => {
+  withIsolatedEnvironment((home) => {
+    installFakeTools(home);
+    installReadyFixtures(home, "codex", 1);
+    installReadyFixtures(home, "claude", 1);
+
+    const coordinatorHome = path.join(home, "src", "firstmate");
+    fs.mkdirSync(coordinatorHome, { recursive: true });
+    fs.writeFileSync(path.join(coordinatorHome, "AGENTS.md"), "# fixture\n");
+    const herdrLog = path.join(home, "herdr-commands.log");
+    process.env.FM_FIRSTMATE_HOME = coordinatorHome;
+    process.env.HERDR_BIN_PATH = path.join(home, "bin", "herdr");
+    process.env.HERDR_ENV = "1";
+    process.env.HERDR_WORKSPACE_ID = "w1";
+    process.env.FAKE_HERDR_LOG = herdrLog;
+    process.env.FM_TEST_AGENT_PRESENT = "0";
+    process.env.FM_TEST_AGENT_STATUS = "idle";
+    process.env.FM_TEST_FIRSTMATE_HOME = coordinatorHome;
+
+    const launched = launchFirstMateTab(defaultRegistry());
+    assert.deepEqual(launched, { paneId: "w1:p2", tabId: "w1:t2" });
+    process.env.FM_TEST_AGENT_PRESENT = "1";
+    const login = openPiLogin();
+    assert.deepEqual(login, { paneId: "w1:p2", target: "w1:p2" });
+
+    const commands = fs.readFileSync(herdrLog, "utf8");
+    assert.match(commands, /tab create --workspace w1/);
+    assert.match(commands, /pane run w1:p2 \.\/scripts\/launch-firstmate\.sh/);
+    assert.match(commands, /agent prompt w1:p2 \/login/);
+    assert.match(commands, /agent focus w1:p2/);
+
+    process.env.FM_TEST_AGENT_STATUS = "blocked";
+    assert.throws(() => openPiLogin(), /resolve the trust or approval prompt/);
+    process.env.FM_TEST_AGENT_STATUS = "idle";
+    assert.throws(() => launchFirstMateTab(defaultRegistry()), /already exists/);
+  });
+});
+
+test("interactive Account Fleet closes cleanly on q", () => {
+  withIsolatedEnvironment(() => {
+    const executablePath = fileURLToPath(
+      new URL("../plugins/account-fleet/account-fleet.mjs", import.meta.url),
+    );
+    const result = spawnSync(process.execPath, [executablePath], {
+      encoding: "utf8",
+      input: "q",
+      timeout: 2_000,
+      env: process.env,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.signal, null);
   });
 });

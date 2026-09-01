@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "when": "The task is repository implementation, debugging, test repair, or a multi-file refactor.",
+      "use": { "harness": "codex", "effort": "high" },
+      "why": "Route implementation-heavy engineering work to the Codex CLI worker harness."
+    },
+    {
+      "when": "The task is architecture review, adversarial code review, or long-form technical writing.",
+      "use": { "harness": "claude", "effort": "high" },
+      "why": "Route review and writing work to the Claude Code worker harness."
+    },
+    {
+      "when": "The task is coordination, triage, bounded research, or documentation synthesis.",
+      "use": { "harness": "pi", "effort": "medium" },
+      "why": "Keep coordination-adjacent work in Pi."
+    }
+  ],
+  "default": { "harness": "pi", "effort": "medium" }
+}

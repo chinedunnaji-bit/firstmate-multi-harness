@@ -148,11 +148,12 @@ supervise workers safely.
 
 ### Live-test status
 
-The command shape, config validation, profile forwarding, and Herdr integration
-matrix are verified. The audit host still needs an interactive Pi `/login`
-before the first coordinator turn and real Pi/Codex/Claude worker dispatches can
-be exercised. Until those tests pass, this repository must not claim end-to-end
-live routing is complete.
+The command shape, config validation, profile forwarding, Herdr integration
+matrix, Herdr tab creation, launcher execution, and FirstMate context loading
+are verified. The live Pi screen listed FirstMate's skills and extensions. The
+audit host still needs an interactive Pi `/login` before the first coordinator
+turn and real Pi/Codex/Claude worker dispatches can be exercised. Until those
+tests pass, this repository must not claim end-to-end live routing is complete.
 
 ## First conversation
 

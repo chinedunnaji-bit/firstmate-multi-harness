@@ -34,6 +34,28 @@ Current help confirms `--model`, `--thinking`, `--list-models`, `--continue`,
 
 Source: [Pi repository](https://github.com/earendil-works/pi).
 
+## First FirstMate launch may install private helper binaries
+
+On the first live coordinator launch, the FirstMate/Pi startup detected that
+`fd` and `ripgrep` were unavailable on the inherited `PATH` and downloaded
+private copies into Pi's agent directory:
+
+```text
+fd installed to $HOME/.pi/agent/bin/fd
+ripgrep installed to $HOME/.pi/agent/bin/rg
+```
+
+This completed successfully without a system-wide package installation. The
+installed binaries were verified directly:
+
+```sh
+"$HOME/.pi/agent/bin/fd" --version
+"$HOME/.pi/agent/bin/rg" --version
+```
+
+Observed versions were `fd 10.5.0` and `ripgrep 15.2.0`. Their absence before
+the first coordinator launch was not a FirstMate startup failure.
+
 ## Why an older Pi can remain visible
 
 The audit host originally had:

@@ -1234,3 +1234,60 @@ node --check plugins/account-fleet/account-fleet.mjs
 node --test tests/account-fleet.test.mjs
 ./scripts/verify-account-ui.sh
 ```
+
+### FirstMate coordinator reached its interactive Pi screen
+
+The already-created `firstmate-coordinator` tab confirmed that `pane run` had
+submitted `./scripts/launch-firstmate.sh` successfully before Account Fleet
+0.2.0 displayed its response-parser error.
+
+Expected behavior: Pi starts from the production FirstMate clone and loads its
+instructions, skills, and extensions.
+
+Actual sanitized result:
+
+```text
+Context: $HOME/AGENTS.md, AGENTS.md
+Skills: FirstMate operating, dispatch, diagnostics, lifecycle, project, and update skills listed
+Extensions: fm-branch-supervision.ts, fm-calm.ts,
+            fm-primary-pi-watch.ts, fm-primary-turnend-guard.ts,
+            herdr-agent-state.ts
+```
+
+This verifies live tab creation, launcher submission, coordinator working
+directory, and FirstMate context loading. It does not yet verify a coordinator
+model or worker dispatch.
+
+During startup, the coordinator detected missing private helper commands and
+downloaded them successfully:
+
+```text
+fd installed to $HOME/.pi/agent/bin/fd
+ripgrep installed to $HOME/.pi/agent/bin/rg
+```
+
+Read-only verification executed afterward:
+
+```sh
+"$HOME/.pi/agent/bin/fd" --version
+"$HOME/.pi/agent/bin/rg" --version
+```
+
+Actual result:
+
+```text
+fd 10.5.0
+ripgrep 15.2.0
+```
+
+The remaining startup warning is the expected independent Pi authentication
+gap:
+
+```text
+Warning: No models available. Use /login to log into a provider via OAuth or API key.
+```
+
+Resolution requires the user to run `/login` in Pi and complete the provider's
+interactive browser flow. Pi also offered version 0.85.0. No update was run:
+the current reproducible stack remains pinned to tested Pi 0.84.4 until the new
+release receives its own compatibility check.

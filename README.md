@@ -18,7 +18,7 @@ explicit terminal operation.
 
 ## Verification status
 
-Audited on Apple Silicon macOS 26.3 through 2026-09-01:
+Audited on Apple Silicon macOS 26.3 through 2026-09-04:
 
 - the pinned command-line tools and their current help surfaces were checked;
 - FirstMate dispatch schema, precedence, supported harness names, and invalid
@@ -29,11 +29,13 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-01:
 - the account wrappers preserve arguments and select their intended profile;
 - `quota-axi` returned separate profile-scoped results;
 - Herdr accepted the Account Fleet plugin manifest, its eight isolated
-  lifecycle, launch, login-targeting, clean-exit, and redaction tests pass, and both primary
-  profiles pass its sanitized live readiness view from the documented NVM
-  shell;
+  lifecycle, launch, login-targeting, clean-exit, and redaction tests pass, and
+  both primary profiles pass its sanitized live readiness view from the
+  documented NVM shell;
 - the Account Fleet pane opened successfully as a live Herdr overlay and
   rendered only the expected Codex/Claude account1 routing metadata;
+- the Account Fleet launch action created a live coordinator tab, ran the
+  launcher, and Pi loaded the FirstMate instructions, skills, and extensions;
 - a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
   dispatch-profile regression;
 - the audit machine's primary Codex and Claude profiles are authenticated and

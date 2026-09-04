@@ -1152,3 +1152,37 @@ and Herdr reported Account Fleet linked, enabled, and at version 0.2.0:
 ```text
 0 failures
 ```
+
+## 2026-09-04
+
+### Account Fleet overlay reopened after the coordinator-control update
+
+Goal: confirm that the linked plugin still opens in the live Herdr workspace
+after adding the launch and Pi-login controls.
+
+Command executed by the user:
+
+```sh
+herdr plugin pane open \
+  --plugin firstmate.account-fleet \
+  --entrypoint accounts
+```
+
+Expected behavior: Herdr opens and focuses the plugin's `accounts` overlay.
+
+Actual sanitized result:
+
+```text
+plugin_id: firstmate.account-fleet
+entrypoint: accounts
+label: Account Fleet
+workspace_id: w1
+focused: true
+agent_status: unknown
+cwd: $HOME/Documents/workspace/Job-search/firstmate-multi-harness/plugins/account-fleet
+```
+
+This is a successful plugin-pane response. `agent_status: unknown` is the
+status of the plugin's ordinary Node terminal process; it does not indicate
+that opening the overlay failed. Visual confirmation and live activation of the
+new `L` launch action remain the next checks.

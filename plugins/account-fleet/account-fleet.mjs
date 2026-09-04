@@ -239,12 +239,13 @@ function portablePath(file) {
     : file;
 }
 
-function runHerdr(args) {
+function runHerdr(args, { resultRequired = true } = {}) {
   const herdr = process.env.HERDR_BIN_PATH || "herdr";
   const result = safeSpawn(herdr, args);
   if (result.status !== 0) {
     throw new Error(`Herdr command failed: ${args.slice(0, 2).join(" ")}`);
   }
+  if (!resultRequired) return null;
   const response = parseJson(result.stdout);
   if (!response?.result) {
     throw new Error(`Herdr returned an invalid response for ${args.slice(0, 2).join(" ")}`);
@@ -369,7 +370,13 @@ function launchFirstMateTab(registry) {
   ]);
   const paneId = created.root_pane?.pane_id;
   if (!paneId) throw new Error("Herdr did not return the coordinator pane id");
-  runHerdr(["pane", "run", paneId, "./scripts/launch-firstmate.sh"]);
+  // Unlike topology commands such as `tab create`, the installed Herdr 0.8.2
+  // `pane run` CLI returns no JSON body on success. Its exit status is the
+  // documented automation boundary for this input-submission operation.
+  runHerdr(
+    ["pane", "run", paneId, "./scripts/launch-firstmate.sh"],
+    { resultRequired: false },
+  );
   return { paneId, tabId: created.tab?.tab_id ?? null };
 }
 

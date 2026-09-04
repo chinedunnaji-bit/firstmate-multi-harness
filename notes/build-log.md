@@ -1186,3 +1186,51 @@ This is a successful plugin-pane response. `agent_status: unknown` is the
 status of the plugin's ordinary Node terminal process; it does not indicate
 that opening the overlay failed. Visual confirmation and live activation of the
 new `L` launch action remain the next checks.
+
+### First live coordinator-launch action failed after tab creation
+
+Goal: create a coordinator tab and run the existing launcher by pressing `L`.
+
+Actual useful UI error:
+
+```text
+Herdr returned an invalid response for pane run
+```
+
+The failure occurred after `tab create` returned the root pane ID. The user was
+instructed not to press `L` again because `pane run` may already have submitted
+the launcher before Account Fleet rejected its response.
+
+Investigation used the installed and official command contracts:
+
+```sh
+herdr pane run --help
+herdr api schema --json
+```
+
+Installed help verifies `herdr pane run <PANE_ID> <COMMAND>...`. The bundled
+protocol-20 schema includes the `tab_created` response used to acquire
+`.result.root_pane.pane_id`, but it has no `pane_command_run` result. The current
+official Herdr CLI reference says creation commands expose JSON IDs and
+describes `pane run` as atomically submitting text plus Enter.
+
+Root cause: Account Fleet 0.2.0 correctly observed exit status 0, then treated
+the empty successful stdout as malformed JSON. The fake-Herdr fixture had
+invented a `pane_command_run` JSON object, masking this behavior.
+
+Herdr's tagged v0.8.2 source independently proves the response behavior:
+`pane_run` calls `send_ok_request`, and `send_ok_request` returns status 0
+without printing the successful response.
+
+Resolution: Account Fleet 0.2.1 treats exit status 0 as sufficient only for
+`pane run`; topology and agent queries still require their documented JSON
+results. The fake now emits no pane-run output, so the regression matches the
+installed CLI.
+
+Verification commands:
+
+```sh
+node --check plugins/account-fleet/account-fleet.mjs
+node --test tests/account-fleet.test.mjs
+./scripts/verify-account-ui.sh
+```

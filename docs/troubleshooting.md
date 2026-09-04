@@ -298,6 +298,62 @@ pi --offline --list-models
 
 At least one usable model should be listed.
 
+## Account Fleet reports `Herdr returned an invalid response for pane run`
+
+### Symptom
+
+After pressing `L`, Account Fleet creates the coordinator tab but displays:
+
+```text
+Herdr returned an invalid response for pane run
+```
+
+### Why it happens
+
+Account Fleet 0.2.0 sent the correct installed command, but reused its
+JSON-response parser for every Herdr operation. Herdr 0.8.2 returns JSON objects
+from topology creation commands such as `tab create`; successful `pane run` is
+an input-submission operation and returns exit status 0 without a JSON body.
+The original fake-Herdr test incorrectly returned an invented
+`pane_command_run` object, so it did not reproduce the installed behavior.
+
+### Diagnosis
+
+The installed help confirms the command shape:
+
+```sh
+herdr pane run --help
+```
+
+The bundled API schema has a `tab_created` result carrying the new pane ID but
+no `pane_command_run` result type. The current official CLI reference describes
+`pane run` as atomically submitting command text plus Enter and promises JSON
+IDs specifically for creation commands.
+
+### Fix
+
+Use Account Fleet 0.2.1 or newer. It still requires a successful exit status
+from `pane run`, but does not require a response body for that one operation.
+
+Because the command may already have been submitted before version 0.2.0 showed
+the parser error, inspect Herdr's `firstmate-coordinator` tab before pressing
+`L` again. The duplicate-coordinator guard will refuse another launch once Pi
+is detected.
+
+### Verify
+
+```sh
+./scripts/verify-account-ui.sh
+herdr plugin list --plugin firstmate.account-fleet --json \
+  | jq -e '.result.plugins[0].version == "0.2.1"'
+```
+
+The launch regression uses a fake `pane run` that exits successfully with
+empty stdout, matching the installed behavior.
+
+Sources: [Herdr v0.8.2 `pane run` implementation](https://github.com/herdrdev/herdr/blob/v0.8.2/src/cli/pane.rs#L989-L1002),
+[Herdr v0.8.2 success-only request handler](https://github.com/herdrdev/herdr/blob/v0.8.2/src/cli.rs#L698-L708).
+
 ## Codex login status succeeds but quota is stale or unavailable
 
 ### Symptom

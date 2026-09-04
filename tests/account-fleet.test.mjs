@@ -85,7 +85,8 @@ case "$1:$2" in
     printf '%s\\n' '{"id":"test","result":{"type":"tab_created","tab":{"tab_id":"w1:t2"},"root_pane":{"pane_id":"w1:p2"}}}'
     ;;
   pane:run)
-    printf '%s\\n' '{"id":"test","result":{"type":"pane_command_run"}}'
+    # Herdr 0.8.2 submits the command successfully without a JSON response.
+    :
     ;;
   agent:list)
     if [ "\${FM_TEST_AGENT_PRESENT:-0}" = "1" ]; then

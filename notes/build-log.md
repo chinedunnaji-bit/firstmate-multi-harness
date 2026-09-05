@@ -1475,3 +1475,56 @@ firstmate: passed
 account-ui: passed
 overall: all verification groups passed
 ```
+
+### First live bulk project intake and Codex worker dispatch
+
+Goal: determine whether Pi was retaining approved project work instead of
+handing it to worker harnesses.
+
+The visible coordinator first ran read-only Python/Git inventory over the
+private catalog. This collected canonical roots, branches, origin presence,
+dirty state, unborn repositories, and duplicate origins. It did not modify the
+source projects.
+
+FirstMate's loaded rules establish that the coordinator owns project add
+intake and private registry state. Its project-management procedure must resolve
+source, managed name, delivery/autonomy posture, unused destination, duplicate
+ownership, and clone safety before a managed project exists. Worker dispatch is
+only valid afterward because `fm-spawn.sh` requires an isolated worktree for a
+registered project.
+
+Read-only operational-state inspection:
+
+```sh
+cd "$HOME/src/firstmate"
+sed -n '1,260p' data/projects.md
+find data -mindepth 2 -maxdepth 2 -name brief.md -print
+find state -maxdepth 1 -name '*.status' -print
+herdr agent list
+```
+
+Sanitized point-in-time result:
+
+```text
+registered projects: 26
+import briefs: 26
+latest brief states: working 8, needs-decision 3, done 2, blocked 1,
+                     no status yet 12
+```
+
+Herdr reported the Pi coordinator plus numerous Codex agents whose primary
+checkouts were managed FirstMate projects and whose foreground paths were
+isolated Treehouse worktrees. The import briefs explicitly assigned coherent
+source reconstruction, secret-safe filtering, testing, and delivery to those
+crewmates while leaving the original source directories unchanged.
+
+Root cause of the apparent non-delegation: the transcript excerpt captured the
+coordinator-owned preflight before the subsequent spawn phase. The configured
+rule routes repository implementation/import work to Codex at high effort, so
+the observed worker choice matches `config/crew-dispatch.json`. Pi remained the
+coordinator; Claude was not selected because this intake was implementation,
+not the architecture/review/writing class.
+
+Several worker states were intentional decision gates rather than dispatch
+failures: three requested provenance/redistribution decisions, and one found no
+project files to import. No worker result was merged by this inspection.

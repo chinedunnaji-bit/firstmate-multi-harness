@@ -40,6 +40,9 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-04:
   candidates, collapsed generated-worktree/reference collections, and
   FirstMate itself without reading project file contents;
 - the live Pi coordinator answered a harmless message at `xhigh` reasoning;
+- an approved project intake created 26 managed-project records and 26 import
+  briefs, and Herdr showed Codex workers operating in isolated Treehouse
+  worktrees under the implementation-heavy dispatch rule;
 - a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
   dispatch-profile regression;
 - the audit machine's primary Codex and Claude profiles are authenticated and
@@ -49,8 +52,8 @@ Still required before this build can claim end-to-end live routing:
 
 - display `/session` or the Pi footer to capture the exact live coordinator
   provider/model ID;
-- dispatch one controlled Pi, Codex, and Claude worker through the live
-  coordinator;
+- dispatch one controlled Pi and Claude worker through the live coordinator,
+  and carry one controlled Codex import through its complete delivery path;
 - implement and test automatic account fallback only after two accounts per
   provider return current capacity evidence.
 

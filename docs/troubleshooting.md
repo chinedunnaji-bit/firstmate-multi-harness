@@ -936,3 +936,63 @@ node "$plugin_root/project-fleet.mjs" --summary
 
 The deterministic suite must pass. Machine-specific counts will vary, so review
 the classifications instead of treating 99 as a universal expected value.
+
+## Pi runs inventory commands before worker tabs appear
+
+### Symptom
+
+After approval of a Computer Projects proposal, the Pi coordinator runs local
+read-only Python or Git inventory commands. It can initially look as though Pi
+is doing the project work instead of dispatching workers.
+
+### Why it happens
+
+FirstMate itself owns project intake and its private fleet registry. Before a
+worker can be spawned, the coordinator must establish canonical sources,
+duplicates, dirty or unpushed state, remotes, unique managed names, delivery
+posture, and unused destinations. `fm-spawn.sh` then requires a registered
+managed project from which Treehouse can provide an isolated worktree.
+
+The harness dispatch table applies at worker/scout intake; it does not require
+the coordinator to delegate its own private registry bookkeeping. After the
+managed project exists, implementation-heavy import work matches this setup's
+Codex dispatch rule.
+
+### Diagnosis
+
+Inspect FirstMate's private operational records without reading project files:
+
+```sh
+cd "$HOME/src/firstmate"
+test -f data/projects.md && sed -n '1,40p' data/projects.md
+find data -mindepth 2 -maxdepth 2 -name brief.md -print
+find state -maxdepth 1 -name '*.status' -print
+```
+
+Inside Herdr, `Ctrl-b g` opens the agent navigator. A correct handoff shows Pi
+as the coordinator and worker harnesses in separate Treehouse paths.
+
+### Fix
+
+No fix is required when the commands are read-only preflight and worker tasks
+follow. If the intent was cataloging only, tell FirstMate to stop at the intake
+proposal and not create managed clones or dispatch imports.
+
+If Pi instead edits an original candidate project directly without the
+captain's concrete approval, stop it and report the exact command: that is
+different from coordinator-owned intake bookkeeping.
+
+### Verify
+
+In the live approved intake, the private records showed:
+
+```text
+registered projects: 26
+import briefs: 26
+latest brief states: 8 working, 3 needs-decision, 2 done, 1 blocked,
+                     12 not yet reporting status
+```
+
+Herdr independently showed Codex agents under managed project and isolated
+Treehouse paths. This verified that Pi performed the central preflight and then
+handed project-specific import work to crewmates.

@@ -195,9 +195,10 @@ FM_VERIFY_CLAUDE_PROFILES=account1 \
   ./scripts/verify-all.sh
 ```
 
-See [Account Fleet UI](account-ui.md) for the visual workflow and
-[account lifecycle](account-lifecycle.md) before logging out, archiving, or
-permanently removing local profile material.
+See [Account Fleet UI](account-ui.md) for the account workflow,
+[Computer Projects UI](project-ui.md) for whole-home discovery and project
+intake review, and [account lifecycle](account-lifecycle.md) before logging out,
+archiving, or permanently removing local profile material.
 
 ## Update Herdr
 

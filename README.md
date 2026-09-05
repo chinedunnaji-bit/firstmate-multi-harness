@@ -10,11 +10,11 @@ Account1 is the deterministic primary. Automatic quota-aware account fallback is
 an explicitly unfinished extension, not a feature claimed by the current clean
 path.
 
-The repository also includes **Account Fleet**, a secret-safe Herdr terminal
-overlay. It can launch the FirstMate coordinator, open Pi's `/login` flow, and
-manage planned/active/retired account-routing metadata. Vendor authentication
-still occurs in the vendor or Pi interface; credential cleanup remains an
-explicit terminal operation.
+The repository also includes a secret-safe Herdr plugin with **Account Fleet**
+and **Computer Projects** terminal overlays. It can launch the FirstMate
+coordinator, open Pi's `/login` flow, manage account-routing metadata, and build
+a private read-only project catalog across the current user's home. Vendor
+authentication and project intake remain explicit, approval-gated operations.
 
 ## Verification status
 
@@ -28,14 +28,18 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-04:
   profile pairs;
 - the account wrappers preserve arguments and select their intended profile;
 - `quota-axi` returned separate profile-scoped results;
-- Herdr accepted the Account Fleet plugin manifest, its eight isolated
-  lifecycle, launch, login-targeting, clean-exit, and redaction tests pass, and
+- Herdr accepted the Account Fleet plugin manifest, its 13 isolated account and
+  project discovery/lifecycle/approval/redaction tests pass, and
   both primary profiles pass its sanitized live readiness view from the
   documented NVM shell;
 - the Account Fleet pane opened successfully as a live Herdr overlay and
   rendered only the expected Codex/Claude account1 routing metadata;
 - the Account Fleet launch action created a live coordinator tab, ran the
   launcher, and Pi loaded the FirstMate instructions, skills, and extensions;
+- a whole-home project scan classified canonical Git projects, non-Git project
+  candidates, collapsed generated-worktree/reference collections, and
+  FirstMate itself without reading project file contents;
+- the live Pi coordinator answered a harmless message at `xhigh` reasoning;
 - a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
   dispatch-profile regression;
 - the audit machine's primary Codex and Claude profiles are authenticated and
@@ -43,7 +47,8 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-04:
 
 Still required before this build can claim end-to-end live routing:
 
-- authenticate Pi with interactive `/login`;
+- display `/session` or the Pi footer to capture the exact live coordinator
+  provider/model ID;
 - dispatch one controlled Pi, Codex, and Claude worker through the live
   coordinator;
 - implement and test automatic account fallback only after two accounts per
@@ -145,7 +150,7 @@ Audited core versions:
 
 ```text
 Node 22.21.1       Pi 0.84.4          Herdr 0.8.2
-Treehouse 2.3.0    Codex CLI 0.151.0  Claude Code 2.1.252
+Treehouse 2.3.0    Codex CLI 0.151.0  Claude Code 2.1.261
 No Mistakes 1.60.2
 ```
 
@@ -195,7 +200,7 @@ All commands in this section run in a normal macOS terminal.
    npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.4
    npm install -g \
      @openai/codex@0.151.0 \
-     @anthropic-ai/claude-code@2.1.252 \
+     @anthropic-ai/claude-code@2.1.261 \
      quota-axi@0.1.34 \
      tasks-axi@0.2.5 \
      gh-axi@0.1.35 \
@@ -441,6 +446,36 @@ the visual workspace for tabs, panes, persistence, and agent status; Pi remains
 the interactive coordinator UI.
 
 UI verification:
+
+```sh
+./scripts/verify-account-ui.sh
+```
+
+## Computer-wide project catalog
+
+FirstMate's managed projects do not need to originate in one workspace folder.
+The same local Herdr plugin can discover Git and non-Git project candidates
+across the current user's Desktop, Documents, Downloads, `src`, and other home
+directories without reading file contents:
+
+```sh
+herdr plugin pane open \
+  --plugin firstmate.account-fleet \
+  --entrypoint projects
+```
+
+Press `S` to scan, `f` to include generated/reference rows, `i` to ask the idle
+FirstMate coordinator to inspect one candidate read-only, or `A` to request a
+read-only deduplication review of the whole private catalog. Discovery never
+registers or clones a project. FirstMate must propose canonical projects and
+wait for explicit approval before intake.
+
+The scanner excludes credential/configuration directories, macOS Library data,
+dependencies, caches, and build artifacts. Sensitive document projects are
+always opt-in because later agent work—not discovery—may send selected content
+to the configured provider. See [Computer Projects UI](docs/project-ui.md).
+
+Project UI verification:
 
 ```sh
 ./scripts/verify-account-ui.sh

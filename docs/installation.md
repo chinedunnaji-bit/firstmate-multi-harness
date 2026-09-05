@@ -90,7 +90,7 @@ Install the exact audited package set under Node 22:
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.4
 npm install -g \
   @openai/codex@0.151.0 \
-  @anthropic-ai/claude-code@2.1.252 \
+  @anthropic-ai/claude-code@2.1.261 \
   quota-axi@0.1.34 \
   tasks-axi@0.2.5 \
   gh-axi@0.1.35 \
@@ -391,7 +391,7 @@ FM_BOOTSTRAP_VERBOSE_FACTS=1 \
 Expected output includes three `crew dispatch rule` facts and a
 `crew dispatch default: pi/default/medium` fact, with no `CREW_DISPATCH:` error.
 
-## 12. Link the Account Fleet Herdr UI
+## 12. Link the Account Fleet and Computer Projects Herdr UI
 
 Herdr 0.8.2 supports manifest-declared terminal plugin panes. Link this
 repository's reviewed plugin; linking registers it but does not start a pane or
@@ -409,9 +409,11 @@ herdr plugin list --plugin firstmate.account-fleet
 ./scripts/verify-account-ui.sh
 ```
 
-The plugin's initial in-memory default is account1 for each provider. It writes
-its sanitized registry only when a lifecycle selection changes. See
-[Account Fleet UI](account-ui.md) before adding or retiring a profile.
+The `accounts` pane's initial in-memory default is account1 for each provider.
+It writes its sanitized registry only when a lifecycle selection changes. The
+separate `projects` pane creates a private, read-only catalog across the user's
+home and requires explicit review before FirstMate intake. See
+[Account Fleet UI](account-ui.md) and [Computer Projects UI](project-ui.md).
 
 Source: [Herdr plugins](https://herdr.dev/docs/plugins/).
 

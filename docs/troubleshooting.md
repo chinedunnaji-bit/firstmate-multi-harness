@@ -828,3 +828,111 @@ node --test tests/account-fleet.test.mjs
 The fixed implementation was also exercised in an isolated PTY: `n`,
 `claude`, `2` rendered `claude account2` as planned, the UI remained active,
 and `q` exited cleanly.
+
+## Anthropic login succeeds in Pi but the first message returns an extra-usage error
+
+### Symptom
+
+Pi reports that Anthropic credentials were saved, but the first model request
+fails with:
+
+```text
+Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Third-party apps now draw from your extra usage, not your plan limits. Add more at claude.ai/settings/usage and keep going."}}
+```
+
+### Why it happens
+
+The installed Pi provider guide states that Claude Pro/Max authentication is
+supported, but Pi is a third-party harness. Its requests draw from Anthropic
+extra usage billed per token rather than ordinary Claude subscription limits.
+Saving the OAuth credential proves authentication, not available billable
+capacity.
+
+Claude Code is a separate harness with its own `CLAUDE_CONFIG_DIR`; its normal
+subscription behavior should not be inferred from a Pi request.
+
+### Diagnosis
+
+From a normal terminal, use Pi's non-refreshing authentication check:
+
+```sh
+pi auth check --provider anthropic --json --no-refresh
+```
+
+Do not inspect or print `$HOME/.pi/agent/auth.json`.
+
+### Fix
+
+For this repository's preferred coordinator route, enter `/login` inside Pi and
+select `ChatGPT Plus/Pro (Codex)`. Then use `/model` to select GPT-5.6 Sol and
+`/thinking` to select `xhigh`. Press `Ctrl+S` in each picker to save the startup
+default.
+
+Alternatively, explicitly fund Anthropic extra usage if third-party Pi billing
+is intended. For Claude subscription work, route the task to the `claude`
+harness so Claude Code uses the selected account profile.
+
+### Verify
+
+Inside Pi, send a harmless message and confirm it answers. `/session` can be
+used to inspect the current session selection without opening an authentication
+file. The observed post-change session answered and displayed:
+
+```text
+Thinking level: xhigh
+```
+
+That transcript proves a responding model and the thinking level; it does not,
+by itself, prove the model ID unless `/session` or the Pi footer displays it.
+
+## Computer Projects discovery returns thousands of nested source directories
+
+### Symptom
+
+The first whole-home discovery implementation returned:
+
+```text
+projectCount: 11046
+non-git-candidate: 7627
+reference: 3344
+```
+
+The result was not sent to FirstMate or accepted as a usable project map.
+
+### Why it happens
+
+The initial non-Git heuristic treated every directory containing two source
+files as an independent project. Extracted source trees and reference
+collections therefore produced thousands of nested false positives.
+
+### Diagnosis
+
+Run a normal scan and inspect only its sanitized counts:
+
+```sh
+plugin_root="$HOME/src/firstmate-multi-harness/plugins/account-fleet"
+node "$plugin_root/project-fleet.mjs" --scan
+```
+
+### Fix
+
+Use the current scanner. Once it recognizes a non-Git project root, it
+suppresses nested non-Git matches. Source-file-only detection is depth-bounded,
+and vendor/reference trees contribute only real Git roots.
+
+The first corrected scan found 99 rows rather than 11,046. A later
+canonical-root refinement also collapsed generated worktree and reference
+collections and stopped descending after finding a project root. On the audit
+machine its final scan produced 151 private catalog rows, of which 109 were
+actionable Git or non-Git candidates; machine-specific counts change as local
+projects change.
+
+### Verify
+
+```sh
+./scripts/verify-account-ui.sh
+node "$plugin_root/project-fleet.mjs" --summary
+```
+
+The deterministic suite must pass. Machine-specific counts will vary, so review
+the classifications instead of treating 99 as a universal expected value.

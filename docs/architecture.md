@@ -48,6 +48,7 @@ are related, but none is interchangeable with another.
 | Session backend | Herdr | Keeps terminal panes/sessions alive and exposes agent/session state. |
 | Code isolation | Treehouse | Leases reusable Git worktrees so workers do not edit the same checkout. |
 | Account routing | This repository's wrappers and documented profile convention | Selects an isolated vendor configuration directory without copying credentials. |
+| Project discovery | This repository's Computer Projects pane | Catalogs project roots privately; it does not register, clone, or authorize agent access. |
 | Provider capacity | `quota-axi` | Reports quota evidence; it does not launch agents or choose an account by itself. |
 | Delivery gate | No Mistakes, when the selected FirstMate project mode uses it | Runs a guarded validation and publication pipeline in an isolated worktree. |
 
@@ -71,6 +72,7 @@ dashboard. Its visible surfaces are:
 | FirstMate | Behavior loaded into Pi from the clone's `AGENTS.md`, extensions, skills, scripts, and state; no standalone app or executable. |
 | Treehouse | Worktree isolation underneath dispatched tasks; normally supervised through FirstMate rather than a separate daily UI. |
 | Account Fleet | This repository's added Herdr terminal overlay for coordinator launch/login actions and sanitized account-routing metadata. |
+| Computer Projects | A separate overlay that discovers project paths and requests approval-gated FirstMate review; it is not the managed-project registry. |
 
 The older quick-start layout cloned FirstMate into the same directory used to
 start Herdr and wrote `config/crew-harness=pi`, so Pi was both coordinator and
@@ -88,6 +90,12 @@ Account Fleet adds a compact action row, not a new web service:
 The labels are activated by keyboard because Herdr plugin v1 exposes managed
 terminal panes, not a native graphical-button API. After launch, the normal
 Herdr tab and Pi screen remain the places where the user works.
+
+Computer Projects adds a private discovery boundary before FirstMate intake:
+directories anywhere in the current user's home can be cataloged, but only an
+explicitly approved canonical project is cloned or created under FirstMate's
+`projects/` root. Generated worktrees, reference repositories, and sensitive
+non-Git document projects are never auto-registered.
 
 ## Control flow
 

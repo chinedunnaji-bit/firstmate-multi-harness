@@ -90,6 +90,25 @@ recoverable but also means forgetting an entry is not credential cleanup.
 
 Source: [Herdr plugin trust and security](https://herdr.dev/docs/plugins/#trust-and-security).
 
+## Computer Projects boundary
+
+The normal Computer Projects scan reads filesystem names and identifies Git
+roots/project markers. It does not read project file contents or remote URLs.
+Its private `projects.json` catalog nevertheless reveals local path names, so it
+is written outside this repository with mode `0600` and must not be published.
+
+Discovery is not authorization. The pane's `i` and `A` controls send a
+read-only review request to the single idle FirstMate coordinator and explicitly
+prohibit mutation. FirstMate must still obtain approval before cloning,
+registering, initializing, or otherwise onboarding a project.
+
+Do not automatically onboard a directory merely because discovery labels it a
+candidate. Legal, employment, health, financial, identity, and other sensitive
+document projects may expose selected content to the configured model provider
+once agent work begins. Generated worktrees, dependencies, and reference
+repositories also create duplicate or misleading project state when registered
+as canonical projects.
+
 ## Before every public push
 
 Run from the repository root:

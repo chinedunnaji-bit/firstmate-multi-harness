@@ -121,6 +121,12 @@ The preferred audited coordinator choice is ChatGPT Plus/Pro (Codex). Pi's
 provider guide states that Claude Pro/Max use from a third-party harness draws
 from Anthropic extra usage rather than ordinary plan limits.
 
+For the coordinator routing used by this guide, open `/model`, select GPT-5.6
+Sol under the `openai-codex` provider, and press `Ctrl+S` to save it as the
+startup default. Then open `/thinking`, select `xhigh`, and press `Ctrl+S`
+again. The installed Pi 0.84.4 catalog verifies `openai-codex` support for that
+model, and Pi's settings guide verifies both save controls.
+
 After completing the browser flow, exit Pi and verify:
 
 ```sh

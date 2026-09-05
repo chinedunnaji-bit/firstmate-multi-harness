@@ -16,11 +16,18 @@ fail() {
 if ! command -v node >/dev/null 2>&1; then
   fail "node is not on PATH"
 else
-  if node --test tests/account-fleet.test.mjs; then
-    ok "Account Fleet registry, lifecycle, readiness, and redaction tests pass"
+  if node --test tests/account-fleet.test.mjs tests/project-fleet.test.mjs; then
+    ok "Account and Computer Projects UI lifecycle, discovery, approval, and redaction tests pass"
   else
-    fail "Account Fleet tests failed"
+    fail "Account or Computer Projects UI tests failed"
   fi
+fi
+
+if grep -q 'id = "projects"' plugins/account-fleet/herdr-plugin.toml && \
+  grep -q 'command = \["node", "project-fleet.mjs"\]' plugins/account-fleet/herdr-plugin.toml; then
+  ok "Herdr plugin manifest declares the Computer Projects pane"
+else
+  fail "Herdr plugin manifest is missing the Computer Projects pane"
 fi
 
 if ! command -v herdr >/dev/null 2>&1; then

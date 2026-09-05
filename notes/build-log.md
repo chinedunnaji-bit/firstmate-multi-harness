@@ -1291,3 +1291,187 @@ Resolution requires the user to run `/login` in Pi and complete the provider's
 interactive browser flow. Pi also offered version 0.85.0. No update was run:
 the current reproducible stack remains pinned to tested Pi 0.84.4 until the new
 release receives its own compatibility check.
+
+### Coordinator provider authentication and Anthropic capacity failure
+
+Goal: authenticate the live Pi coordinator and select its reasoning level.
+
+The user completed Pi's Anthropic login and selected an Opus model. Pi saved
+the credential under its private agent directory and immediately displayed the
+installed provider warning that third-party harness usage draws from Anthropic
+extra usage rather than Claude plan limits.
+
+The first harmless message failed with the useful error:
+
+```text
+Error: 400 ... Third-party apps now draw from your extra usage, not your plan limits.
+Add more at claude.ai/settings/usage and keep going.
+```
+
+The request identifier and personal absolute credential path were omitted.
+
+Root cause: authentication succeeded, but the account had no applicable
+Anthropic extra-usage capacity for a Pi request. A Claude subscription login in
+Pi is not the same billing surface as Claude Code.
+
+The documented coordinator resolution is to select `ChatGPT Plus/Pro (Codex)`
+inside Pi, choose GPT-5.6 Sol in `/model`, and choose `xhigh` in `/thinking`.
+The installed Pi 0.84.4 guide lists that subscription provider and verified
+`openai-codex` support for GPT-5.6 Sol. OpenAI's current model page verifies that
+GPT-5.6 Sol accepts `xhigh` reasoning.
+
+Subsequent live output proved that Pi answered and displayed:
+
+```text
+Thinking level: xhigh
+```
+
+The captured excerpt did not show `/session` or a footer model ID, so the build
+log does not claim that the exact live model ID was independently observed.
+
+### Whole-home project discovery and Computer Projects UI
+
+Goal: find project roots outside one workspace, including non-Git desktop
+automation/document projects, without reading their contents or registering
+anything automatically.
+
+The first read-only Git-root scan covered the user's home while pruning macOS
+Library data, credentials, caches, dependencies, and build directories. It
+found:
+
+```text
+Git roots: 98
+generated worktrees: 16
+reference/external repositories: 23
+other Git roots: 59
+```
+
+A specifically reported desktop project was absent from that list because it
+was not a Git repository. Filename-only inspection confirmed a directory with
+seven top-level Python scripts. Its personal name and document filenames are
+not recorded in this public log.
+
+The initial Computer Projects implementation generalized non-Git discovery too
+far. Its first disposable whole-home scan returned:
+
+```text
+projectCount: 11046
+non-git-candidate: 7627
+reference: 3344
+catalog mode: 0600
+```
+
+That output was rejected and never sent to FirstMate. Root cause: every nested
+directory containing two source files was treated as a separate project.
+
+The second implementation suppressed descendants after finding a non-Git
+project, depth-bounded source-only candidates, and excluded non-Git matches
+inside reference/vendor trees. It produced the accurate but slow result below
+because live dirty checks ran across every canonical repository:
+
+```text
+projectCount: 99
+non-git-candidate: 1
+candidate: 58
+generated-worktree: 16
+reference: 23
+firstmate-system: 1
+```
+
+The next normal scan deferred changeable branch, dirty, remote, duplicate, and
+unpushed checks to FirstMate's explicit review. A cold JavaScript traversal
+still took about two minutes, so it was rejected for an interactive button.
+
+The final scanner stops descending when it finds a canonical Git or non-Git
+project root and collapses generated-worktree, application, SDK, sample,
+browser-resource, and external/reference collections into audit rows. Its
+disposable final verification reported:
+
+```text
+projectCount: 151
+non-git-candidate: 62
+candidate: 47
+reference collections: 37
+generated-worktree collections: 4
+firstmate-system: 1
+process elapsed time: 0.27 seconds
+catalog mode: 0600
+```
+
+Of those rows, 109 were actionable Git or non-Git candidates. Counts are a
+point-in-time machine fact, not a fixed expected result. `--scan-live` remains
+available as a slower optional diagnostic.
+
+The Herdr plugin now declares separate `accounts` and `projects` overlays. The
+Computer Projects pane can scan, filter, request a read-only inspection of one
+candidate, or request a read-only deduplication review of the whole private
+catalog. Both review actions require typed confirmation and target exactly one
+idle/done Pi coordinator in the FirstMate home. Neither action registers a
+project; FirstMate must return a proposal and wait for explicit approval.
+
+Verification:
+
+```sh
+node --check plugins/account-fleet/project-fleet.mjs
+node --test tests/account-fleet.test.mjs tests/project-fleet.test.mjs
+./scripts/verify-account-ui.sh
+```
+
+Deterministic test result:
+
+```text
+13 tests, 13 passed, 0 failed
+```
+
+The plugin was then relinked into the running Herdr server. Herdr reported
+version `0.3.0`, enabled, with both the `accounts` and `projects` panes. Opening
+the new pane succeeded as `Computer Projects`. Its first live render showed:
+
+```text
+109 shown; 151 total; filter=candidates; unreadable directories=4
+```
+
+The live view included the specifically reported non-Git Desktop project. Its
+private name remains excluded from this public build log. No FirstMate review
+action was triggered during verification because that would disclose selected
+path metadata to the coordinator/model and requires the user's explicit typed
+confirmation.
+
+### Fresh-shell verification and Claude Code pin refresh
+
+Running `verify-all.sh` from the calling process initially resolved Homebrew
+Node 26 plus old NVM v20 harnesses and could not find the AXI commands. This was
+the documented stale-shell condition, not an installation failure. The same
+command was rerun through a fresh Zsh login shell:
+
+```sh
+/bin/zsh -lic 'cd "$HOME/Documents/workspace/Job-search/firstmate-multi-harness"; ./scripts/verify-all.sh'
+```
+
+That shell correctly resolved Node 22.21.1, Pi 0.84.4, Codex CLI 0.151.0, and
+all five pinned AXI tools from the Node 22 NVM prefix. Harness authentication,
+strict quota evidence, Herdr integrations, FirstMate bootstrap, and all 13 UI
+tests passed.
+
+The only remaining failure was real version drift: the installed Claude Code
+reported `2.1.261` while the guide expected the earlier audited `2.1.252`.
+Direct npm and CLI checks confirmed:
+
+```text
+@anthropic-ai/claude-code@2.1.261
+2.1.261 (Claude Code)
+```
+
+The clean-path pin and verifier were updated to `2.1.261`. Earlier `2.1.252`
+entries above remain unchanged as historical evidence of the initial build.
+
+Final verification after the pin refresh:
+
+```text
+prerequisites: passed
+harnesses: passed
+herdr-integrations: passed
+firstmate: passed
+account-ui: passed
+overall: all verification groups passed
+```

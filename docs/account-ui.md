@@ -4,6 +4,10 @@ Account Fleet is this repository's local Herdr plugin for managing sanitized
 Codex and Claude profile metadata. It opens as a terminal overlay inside Herdr;
 it is not a browser service and it does not patch Herdr or FirstMate.
 
+The same plugin also declares a separate [Computer Projects](project-ui.md)
+pane. Account Fleet owns provider profiles; Computer Projects owns private,
+read-only project discovery. Neither pane stores credentials.
+
 Herdr 0.8.2 officially supports out-of-process workflow plugins and
 manifest-declared terminal panes. Native non-terminal plugin panes are not part
 of plugin v1, so a managed terminal overlay with keyboard-operated action

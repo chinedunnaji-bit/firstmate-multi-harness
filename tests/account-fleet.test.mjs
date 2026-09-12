@@ -28,6 +28,8 @@ function withIsolatedEnvironment(callback) {
     "HOME",
     "PATH",
     "FM_ACCOUNT_FLEET_CONFIG",
+    "FM_ACCOUNT_ROUTER",
+    "FM_ACCOUNT_ROUTER_STATE",
     "FM_FIRSTMATE_HOME",
     "HERDR_BIN_PATH",
     "HERDR_ENV",
@@ -193,7 +195,7 @@ test("the FirstMate launcher consumes the selected primary profiles", () => {
     fs.mkdirSync(path.join(home, ".claude-account3"));
     executable(
       path.join(home, "bin", "pi"),
-      'printf \'{"codex":"%s","claude":"%s","cwd":"%s","arg":"%s"}\\n\' "$CODEX_HOME" "$CLAUDE_CONFIG_DIR" "$PWD" "$1"',
+      'printf \'{"codex":"%s","claude":"%s","registry":"%s","router":"%s","routerState":"%s","cwd":"%s","arg":"%s"}\\n\' "$CODEX_HOME" "$CLAUDE_CONFIG_DIR" "$FM_ACCOUNT_FLEET_CONFIG" "$FM_ACCOUNT_ROUTER" "$FM_ACCOUNT_ROUTER_STATE" "$PWD" "$1"',
     );
 
     const repository = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -209,6 +211,9 @@ test("the FirstMate launcher consumes the selected primary profiles", () => {
     assert.deepEqual(JSON.parse(result.stdout), {
       codex: path.join(home, ".codex-account2"),
       claude: path.join(home, ".claude-account3"),
+      registry: process.env.FM_ACCOUNT_FLEET_CONFIG,
+      router: path.join(repository, "scripts", "account-router.mjs"),
+      routerState: path.join(home, ".local", "state", "firstmate-account-router", "state.json"),
       cwd: firstmateHome,
       arg: "probe",
     });

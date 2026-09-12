@@ -11,6 +11,9 @@ import { fileURLToPath } from "node:url";
 const SCHEMA = "firstmate.account-fleet.v1";
 const PROVIDERS = ["codex", "claude"];
 const STATES = ["planned", "active", "retired"];
+// Zero means "switch only on provider-reported exhaustion". A non-zero
+// percentage is an explicit operator policy, never an inferred quota rule.
+const DEFAULT_LOW_QUOTA_PERCENT = 0;
 const ANSI = {
   clear: "\x1b[2J\x1b[H",
   reset: "\x1b[0m",
@@ -30,10 +33,12 @@ function defaultRegistry() {
       codex: {
         primary: "account1",
         profiles: [{ label: "account1", state: "active" }],
+        routing: { enabled: true, lowQuotaPercent: DEFAULT_LOW_QUOTA_PERCENT },
       },
       claude: {
         primary: "account1",
         profiles: [{ label: "account1", state: "active" }],
+        routing: { enabled: true, lowQuotaPercent: DEFAULT_LOW_QUOTA_PERCENT },
       },
     },
   };
@@ -55,8 +60,29 @@ function configPath() {
 }
 
 function validateLabel(label) {
-  if (!/^account[1-9][0-9]*$/.test(label)) {
-    throw new Error("profile label must be accountN, where N is a positive integer");
+  if (label !== "default" && !/^account[1-9][0-9]*$/.test(label)) {
+    throw new Error("profile label must be default or accountN, where N is a positive integer");
+  }
+}
+
+function normalizeRouting(entry) {
+  if (entry.routing === undefined) {
+    entry.routing = { enabled: true, lowQuotaPercent: DEFAULT_LOW_QUOTA_PERCENT };
+  }
+  const routing = entry.routing;
+  if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
+    throw new Error("provider routing policy must be an object");
+  }
+  if (typeof routing.enabled !== "boolean") {
+    throw new Error("provider routing enabled flag must be boolean");
+  }
+  if (
+    typeof routing.lowQuotaPercent !== "number" ||
+    !Number.isFinite(routing.lowQuotaPercent) ||
+    routing.lowQuotaPercent < 0 ||
+    routing.lowQuotaPercent > 100
+  ) {
+    throw new Error("provider lowQuotaPercent must be a number from 0 through 100");
   }
 }
 
@@ -70,6 +96,7 @@ function validateRegistry(registry) {
     if (!entry || !Array.isArray(entry.profiles)) {
       throw new Error(`account registry is missing provider ${provider}`);
     }
+    normalizeRouting(entry);
     validateLabel(entry.primary);
     const labels = new Set();
     for (const profile of entry.profiles) {
@@ -142,10 +169,42 @@ function profileEntry(registry, provider, label) {
 
 function sortProfiles(entry) {
   entry.profiles.sort((left, right) => {
+    if (left.label === "default") return 1;
+    if (right.label === "default") return -1;
     const leftNumber = Number(left.label.slice("account".length));
     const rightNumber = Number(right.label.slice("account".length));
     return leftNumber - rightNumber;
   });
+}
+
+function setRoutingEnabled(registry, provider, enabled) {
+  if (typeof enabled !== "boolean") throw new Error("routing enabled must be boolean");
+  const entry = providerEntry(registry, provider);
+  normalizeRouting(entry);
+  entry.routing.enabled = enabled;
+}
+
+function setLowQuotaPercent(registry, provider, percent) {
+  const numeric = Number(percent);
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
+    throw new Error("low quota percent must be a number from 0 through 100");
+  }
+  const entry = providerEntry(registry, provider);
+  normalizeRouting(entry);
+  entry.routing.lowQuotaPercent = numeric;
+}
+
+function orderedActiveProfiles(registry, provider) {
+  const entry = providerEntry(registry, provider);
+  const active = entry.profiles.filter((profile) => profile.state === "active");
+  const primary = active.find((profile) => profile.label === entry.primary);
+  const remainder = active.filter((profile) => profile.label !== entry.primary);
+  remainder.sort((left, right) => {
+    if (left.label === "default") return -1;
+    if (right.label === "default") return 1;
+    return Number(left.label.slice("account".length)) - Number(right.label.slice("account".length));
+  });
+  return primary ? [primary, ...remainder] : remainder;
 }
 
 function addProfile(registry, provider, label) {
@@ -190,15 +249,37 @@ function removeProfile(registry, provider, label) {
 
 function profileNumber(label) {
   validateLabel(label);
+  if (label === "default") return null;
   return label.slice("account".length);
 }
 
 function profilePaths(provider, label) {
   const number = profileNumber(label);
+  if (number === null) {
+    return {
+      directory: path.join(os.homedir(), `.${provider}`),
+      wrapper: provider,
+      isDefault: true,
+    };
+  }
   return {
     directory: path.join(os.homedir(), `.${provider}-account${number}`),
     wrapper: path.join(os.homedir(), ".local", "bin", `${provider}${number}`),
+    isDefault: false,
   };
+}
+
+function executableOnPath(name) {
+  const pathEntries = String(process.env.PATH ?? "").split(path.delimiter);
+  return pathEntries.some((entry) => {
+    if (!entry) return false;
+    try {
+      const stat = fs.statSync(path.join(entry, name));
+      return stat.isFile() && Boolean(stat.mode & 0o111);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function safeSpawn(command, args, env = {}) {
@@ -267,10 +348,14 @@ function verifyProfile(provider, label) {
     quota: false,
   };
 
-  try {
-    checks.wrapper = fs.statSync(paths.wrapper).isFile() && Boolean(fs.statSync(paths.wrapper).mode & 0o111);
-  } catch {
-    checks.wrapper = false;
+  if (paths.isDefault) {
+    checks.wrapper = executableOnPath(paths.wrapper);
+  } else {
+    try {
+      checks.wrapper = fs.statSync(paths.wrapper).isFile() && Boolean(fs.statSync(paths.wrapper).mode & 0o111);
+    } catch {
+      checks.wrapper = false;
+    }
   }
 
   if (checks.directory) {
@@ -421,8 +506,8 @@ function activateProfile(registry, provider, label, verification) {
 function setupCommands(provider, label, registry = defaultRegistry()) {
   const number = profileNumber(label);
   const selector = provider === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
-  const directory = `$HOME/.${provider}-account${number}`;
-  const wrapper = `${provider}${number}`;
+  const directory = number === null ? `$HOME/.${provider}` : `$HOME/.${provider}-account${number}`;
+  const wrapper = number === null ? provider : `${provider}${number}`;
   const generic =
     provider === "codex"
       ? "examples/codex-account-wrapper.sh"
@@ -430,20 +515,27 @@ function setupCommands(provider, label, registry = defaultRegistry()) {
   const login = provider === "codex" ? `${wrapper} login` : `${wrapper} auth login`;
   const codexLabel = provider === "codex" ? label : registry.providers.codex.primary;
   const claudeLabel = provider === "claude" ? label : registry.providers.claude.primary;
-  const codexDirectory = `$HOME/.codex-account${profileNumber(codexLabel)}`;
-  const claudeDirectory = `$HOME/.claude-account${profileNumber(claudeLabel)}`;
+  const codexNumber = profileNumber(codexLabel);
+  const claudeNumber = profileNumber(claudeLabel);
+  const codexDirectory = codexNumber === null ? "$HOME/.codex" : `$HOME/.codex-account${codexNumber}`;
+  const claudeDirectory = claudeNumber === null ? "$HOME/.claude" : `$HOME/.claude-account${claudeNumber}`;
   const quotaFlags =
     provider === "claude"
       ? "--allow-keychain-prompt --no-credential-refresh"
       : "--no-credential-refresh";
-  const commands = [
-    `install -d "$HOME/.local/bin"`,
-    `test ! -e "$HOME/.local/bin/${wrapper}"`,
-    `install -m 0755 ${generic} "$HOME/.local/bin/${wrapper}"`,
+  const commands = [];
+  if (number !== null) {
+    commands.push(
+      `install -d "$HOME/.local/bin"`,
+      `test ! -e "$HOME/.local/bin/${wrapper}"`,
+      `install -m 0755 ${generic} "$HOME/.local/bin/${wrapper}"`,
+    );
+  }
+  commands.push(
     login,
     `${selector}="${directory}" herdr integration install ${provider}`,
     `${selector}="${directory}" quota-axi --provider ${provider} --json ${quotaFlags} >/dev/null`,
-  ];
+  );
   for (const tool of ["gh-axi", "chrome-devtools-axi", "lavish-axi"]) {
     commands.push(
       `CODEX_HOME="${codexDirectory}" CLAUDE_CONFIG_DIR="${claudeDirectory}" ${tool} setup hooks`,
@@ -460,6 +552,7 @@ function sanitizedSnapshot(registry, liveChecks = false) {
       return {
         provider,
         primary: entry.primary,
+        routing: { ...entry.routing },
         profiles: entry.profiles.map((profile) => ({
           label: profile.label,
           state: profile.state,
@@ -478,6 +571,7 @@ function flattenProfiles(registry) {
       label: profile.label,
       state: profile.state,
       primary: registry.providers[provider].primary === profile.label,
+      routing: { ...registry.providers[provider].routing },
     })),
   );
 }
@@ -499,6 +593,7 @@ function draw(registry, selected, verification, message = "") {
   let output = ANSI.clear;
   output += `${ANSI.bold}${ANSI.cyan}FirstMate Account Fleet${ANSI.reset}\n`;
   output += `${ANSI.dim}Sanitized routing metadata — credential contents are never read or shown${ANSI.reset}\n`;
+  output += `${ANSI.dim}Same-provider routing only — Codex never falls through to Claude or vice versa${ANSI.reset}\n`;
   output += `${rule}\n`;
   output += `${ANSI.bold}Coordinator${ANSI.reset}  `;
   output += `${ANSI.reverse} L  Launch FirstMate ${ANSI.reset}  `;
@@ -529,9 +624,19 @@ function draw(registry, selected, verification, message = "") {
     output += `Herdr ${checkMark(checks.integration)}  `;
     output += `quota ${checkMark(checks.quota)}\n`;
   }
+  if (current) {
+    const policy = current.routing;
+    const order = orderedActiveProfiles(registry, current.provider)
+      .map((profile) => profile.label)
+      .join(" → ");
+    output += `${ANSI.bold}${current.provider} routing:${ANSI.reset} `;
+    output += `${policy.enabled ? `${ANSI.green}on${ANSI.reset}` : `${ANSI.yellow}off${ANSI.reset}`}  `;
+    output += `captain floor ${policy.lowQuotaPercent}%  order ${order || "none"}\n`;
+  }
   if (message) output += `${ANSI.yellow}${message}${ANSI.reset}\n`;
   output += "\n↑/↓ select   v verify   n new planned   e enable   p promote\n";
   output += "r retire     x forget registry entry   c setup commands   q close\n";
+  output += "a auto-route on/off                    t set quota floor\n";
   output += "L launch a coordinator tab            / send /login to idle coordinator\n";
   process.stdout.write(output);
 }
@@ -596,10 +701,11 @@ async function interactive() {
         message = "Verification finished; only boolean health results are retained.";
       } else if (key === "n") {
         const provider = (await promptLine("Provider (codex/claude): ")).toLowerCase();
-        const number = await promptLine("Account number: ");
-        addProfile(registry, provider, `account${number}`);
+        const value = (await promptLine("Profile (default or account number): ")).toLowerCase();
+        const label = value === "default" ? "default" : `account${value}`;
+        addProfile(registry, provider, label);
         writeRegistry(registry);
-        message = `${provider} account${number} added as planned; press c for setup commands.`;
+        message = `${provider} ${label} added as planned; press c for setup commands.`;
       } else if (key === "e" && current) {
         const result = verifyProfile(current.provider, current.label);
         verification.set(`${current.provider}:${current.label}`, result);
@@ -628,6 +734,17 @@ async function interactive() {
         }
       } else if (key === "c" && current) {
         await showCommands(current.provider, current.label);
+      } else if (key === "a" && current) {
+        setRoutingEnabled(registry, current.provider, !current.routing.enabled);
+        writeRegistry(registry);
+        message = `${current.provider} automatic same-provider routing is ${registry.providers[current.provider].routing.enabled ? "on" : "off"}.`;
+      } else if (key === "t" && current) {
+        const percent = await promptLine(
+          "Switch when remaining quota is at or below percent (0-100): ",
+        );
+        setLowQuotaPercent(registry, current.provider, percent);
+        writeRegistry(registry);
+        message = `${current.provider} quota floor set to ${registry.providers[current.provider].routing.lowQuotaPercent}%.`;
       } else if (key === "l" || key === "L") {
         const confirmation = await promptLine(
           "Start a new coordinator only if one is not already running. Type launch: ",
@@ -661,12 +778,15 @@ function usage() {
   process.stdout.write(`Usage:
   account-fleet.mjs
   account-fleet.mjs --snapshot [--live]
-  account-fleet.mjs --add codex|claude accountN
-  account-fleet.mjs --promote codex|claude accountN
-  account-fleet.mjs --retire codex|claude accountN
-  account-fleet.mjs --remove codex|claude accountN
+  account-fleet.mjs --add codex|claude default|accountN
+  account-fleet.mjs --promote codex|claude default|accountN
+  account-fleet.mjs --retire codex|claude default|accountN
+  account-fleet.mjs --remove codex|claude default|accountN
+  account-fleet.mjs --routing codex|claude on|off
+  account-fleet.mjs --threshold codex|claude 0-100
 
-The interactive terminal UI never displays credential, identity, or quota amounts.
+Profile labels may be default or accountN. The interactive terminal UI never
+displays credential, identity, or quota amounts.
 `);
 }
 
@@ -682,11 +802,15 @@ function runCommandLine(args) {
     return true;
   }
   const [operation, provider, label] = args;
-  if (!provider || !label) throw new Error("operation requires a provider and accountN label");
+  if (!provider || !label) throw new Error("operation requires a provider and value");
   if (operation === "--add") addProfile(registry, provider, label);
   else if (operation === "--promote") promoteProfile(registry, provider, label);
   else if (operation === "--retire") retireProfile(registry, provider, label);
   else if (operation === "--remove") removeProfile(registry, provider, label);
+  else if (operation === "--routing") {
+    if (label !== "on" && label !== "off") throw new Error("routing value must be on or off");
+    setRoutingEnabled(registry, provider, label === "on");
+  } else if (operation === "--threshold") setLowQuotaPercent(registry, provider, label);
   else throw new Error(`unknown operation: ${operation}`);
   writeRegistry(registry);
   process.stdout.write("Account registry updated. Credential and profile files were not changed.\n");
@@ -720,5 +844,8 @@ export {
   verifyProfile,
   launchFirstMateTab,
   openPiLogin,
+  orderedActiveProfiles,
+  setLowQuotaPercent,
+  setRoutingEnabled,
   writeRegistry,
 };

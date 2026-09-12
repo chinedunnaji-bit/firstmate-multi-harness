@@ -2,14 +2,21 @@
 
 set -euo pipefail
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+setup_root=$(cd "$script_dir/.." && pwd)
 firstmate_home=${FM_FIRSTMATE_HOME:-$HOME/src/firstmate}
 registry_path=${FM_ACCOUNT_FLEET_CONFIG:-}
+account_router=${FM_ACCOUNT_ROUTER:-$setup_root/scripts/account-router.mjs}
 
 if [ -z "$registry_path" ] && command -v herdr >/dev/null 2>&1; then
   plugin_config_dir=$(herdr plugin config-dir firstmate.account-fleet 2>/dev/null || true)
   if [ -n "$plugin_config_dir" ]; then
     registry_path=$plugin_config_dir/accounts.json
   fi
+fi
+
+if [ -z "$registry_path" ]; then
+  registry_path=$HOME/.config/firstmate-multi-harness/accounts.json
 fi
 
 codex_primary=account1
@@ -38,31 +45,31 @@ if [ -n "$registry_path" ] && [ -f "$registry_path" ]; then
   claude_primary=$(jq -er '.providers.claude.primary' "$registry_path")
 fi
 
-profile_number() {
-  local number
-  case "$1" in
+profile_directory() {
+  local provider=$1 label=$2 number
+  case "$label" in
+    default)
+      printf '%s\n' "$HOME/.$provider"
+      ;;
     account[1-9]*)
-      number=${1#account}
+      number=${label#account}
       case "$number" in
         *[!0-9]*|'') return 1 ;;
       esac
-      printf '%s\n' "$number"
+      printf '%s\n' "$HOME/.$provider-account$number"
       ;;
     *) return 1 ;;
   esac
 }
 
-if ! codex_number=$(profile_number "$codex_primary"); then
+if ! codex_home=$(profile_directory codex "$codex_primary"); then
   echo "launch-firstmate: invalid Codex primary '$codex_primary'" >&2
   exit 1
 fi
-if ! claude_number=$(profile_number "$claude_primary"); then
+if ! claude_config_dir=$(profile_directory claude "$claude_primary"); then
   echo "launch-firstmate: invalid Claude primary '$claude_primary'" >&2
   exit 1
 fi
-
-codex_home=$HOME/.codex-account$codex_number
-claude_config_dir=$HOME/.claude-account$claude_number
 
 if [ ! -d "$codex_home" ]; then
   echo "launch-firstmate: Codex primary directory is missing: $codex_home" >&2
@@ -80,8 +87,15 @@ command -v pi >/dev/null 2>&1 || {
   echo "launch-firstmate: pi is not on PATH" >&2
   exit 1
 }
+if [ ! -x "$account_router" ]; then
+  echo "launch-firstmate: account router is missing or not executable: $account_router" >&2
+  exit 1
+fi
 
 export CODEX_HOME="$codex_home"
 export CLAUDE_CONFIG_DIR="$claude_config_dir"
+export FM_ACCOUNT_FLEET_CONFIG="$registry_path"
+export FM_ACCOUNT_ROUTER="$account_router"
+export FM_ACCOUNT_ROUTER_STATE=${FM_ACCOUNT_ROUTER_STATE:-$HOME/.local/state/firstmate-account-router/state.json}
 cd "$firstmate_home"
 exec pi "$@"

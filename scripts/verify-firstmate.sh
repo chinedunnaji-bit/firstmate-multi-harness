@@ -39,6 +39,12 @@ else
   fail "fm-spawn.sh has invalid Bash syntax"
 fi
 
+if bash -n "$firstmate_repo/bin/fm-teardown.sh"; then
+  ok "fm-teardown.sh passes Bash syntax validation"
+else
+  fail "fm-teardown.sh has invalid Bash syntax"
+fi
+
 if grep -Fq 'if [ "$HARNESS" = codex ] && [ -n "${CODEX_HOME:-}" ]; then' \
   "$firstmate_repo/bin/fm-spawn.sh" \
   && grep -Fq 'LAUNCH="CODEX_HOME=$(shell_quote "$CODEX_HOME") $LAUNCH"' \
@@ -46,6 +52,22 @@ if grep -Fq 'if [ "$HARNESS" = codex ] && [ -n "${CODEX_HOME:-}" ]; then' \
   ok "Codex worker launches explicitly forward CODEX_HOME"
 else
   fail "Codex worker CODEX_HOME forwarding is absent; apply or re-evaluate the tested patch"
+fi
+
+if grep -Fq 'resolve_account_profile || exit 1' "$firstmate_repo/bin/fm-spawn.sh" \
+  && grep -Fq 'account_profile=$ACCOUNT_PROFILE' "$firstmate_repo/bin/fm-spawn.sh" \
+  && grep -Fq 'release_account_lease "$ID"' "$firstmate_repo/bin/fm-teardown.sh" \
+  && grep -Fq 'account-profile selection is a separate local' "$firstmate_repo/AGENTS.md"; then
+  ok "same-provider account selection, metadata, recovery guidance, and lease cleanup are installed"
+else
+  fail "FirstMate account-routing integration is incomplete; apply or re-evaluate the tested patch"
+fi
+
+account_patch="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/patches/firstmate-account-routing.patch"
+if git -C "$firstmate_repo" apply --unidiff-zero --reverse --check "$account_patch" >/dev/null 2>&1; then
+  ok "the tracked account-routing patch exactly matches the installed FirstMate changes"
+else
+  fail "the installed FirstMate changes do not reverse-check against the tracked account-routing patch"
 fi
 
 if [ -f "$firstmate_repo/config/backend" ] \

@@ -16,10 +16,10 @@ fail() {
 if ! command -v node >/dev/null 2>&1; then
   fail "node is not on PATH"
 else
-  if node --test tests/account-fleet.test.mjs tests/project-fleet.test.mjs; then
-    ok "Account and Computer Projects UI lifecycle, discovery, approval, and redaction tests pass"
+  if node --test tests/account-fleet.test.mjs tests/account-router.test.mjs tests/project-fleet.test.mjs; then
+    ok "Account routing plus Account and Computer Projects UI tests pass"
   else
-    fail "Account or Computer Projects UI tests failed"
+    fail "Account routing or UI tests failed"
   fi
 fi
 

@@ -1,0 +1,277 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 40bb092..88bfa44 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -220,0 +221,12 @@ A missing dependency, authentication failure, unsupported backend, or version re
++When `FM_ACCOUNT_ROUTER` is set, account-profile selection is a separate local
++boundary below harness dispatch. `fm-spawn.sh` may change only `CODEX_HOME`
++inside `harness=codex`, or only `CLAUDE_CONFIG_DIR` inside `harness=claude`;
++labels such as `codex1` and `claude1` are never harness identifiers. If current
++worker evidence proves a quota or credential stop, preserve its worktree and
++resolved harness, then use the ordinary `fm-control.sh <task-id> relaunch`
++lifecycle. The replacement spawn re-evaluates active profiles for that same
++provider. If selection refuses because capacity is stale, unknown, tied, or
++exhausted, report that same-provider blocker and stop rather than crossing to a
++different harness. A running CLI cannot change credential stores in place, so
++profile rotation occurs only at a spawn or controlled relaunch boundary.
++
+diff --git a/bin/fm-spawn.sh b/bin/fm-spawn.sh
+index 9158fce..45cb1f3 100755
+--- a/bin/fm-spawn.sh
++++ b/bin/fm-spawn.sh
+@@ -729,0 +730,3 @@ CONFIG_INHERIT_LOCK_HELD=0
++ACCOUNT_PROFILE=
++ACCOUNT_PROFILE_DIR=
++ACCOUNT_ROUTER_RESULT=
+@@ -824,0 +828 @@ spawn_abort_cleanup() {
++            [ -z "$ACCOUNT_PROFILE" ] || echo "account_profile=$ACCOUNT_PROFILE"
+@@ -1196,0 +1201,42 @@ shell_quote() {
++resolve_account_profile() {
++  case "$HARNESS" in
++    codex|claude) ;;
++    *) return 0 ;;
++  esac
++  [ -n "${FM_ACCOUNT_ROUTER:-}" ] || return 0
++  [ -x "$FM_ACCOUNT_ROUTER" ] || {
++    echo "error: account router is not executable: $FM_ACCOUNT_ROUTER" >&2
++    return 1
++  }
++  command -v jq >/dev/null 2>&1 || {
++    echo "error: jq is required to validate account-router output" >&2
++    return 1
++  }
++  if ! ACCOUNT_ROUTER_RESULT=$("$FM_ACCOUNT_ROUTER" select \
++      --provider "$HARNESS" --task-id "$ID" --scope "$FM_HOME"); then
++    echo "error: $HARNESS account selection failed; the harness was not changed" >&2
++    return 1
++  fi
++  if ! printf '%s\n' "$ACCOUNT_ROUTER_RESULT" | jq -e \
++      --arg provider "$HARNESS" --arg task "$ID" '
++        .schema == "firstmate.account-router-selection.v1" and
++        .provider == $provider and .harness == $provider and .taskId == $task and
++        (.profile | type == "string" and test("^(default|account[1-9][0-9]*)$")) and
++        (.directory | type == "string" and test("^/[^\\r\\n]*$")) and
++        (.selector == (if $provider == "codex" then "CODEX_HOME" else "CLAUDE_CONFIG_DIR" end))
++      ' >/dev/null; then
++    echo "error: account router returned an invalid or cross-provider selection" >&2
++    return 1
++  fi
++  ACCOUNT_PROFILE=$(printf '%s\n' "$ACCOUNT_ROUTER_RESULT" | jq -er '.profile') || return 1
++  ACCOUNT_PROFILE_DIR=$(printf '%s\n' "$ACCOUNT_ROUTER_RESULT" | jq -er '.directory') || return 1
++  [ -d "$ACCOUNT_PROFILE_DIR" ] || {
++    echo "error: selected $HARNESS account directory is missing: $ACCOUNT_PROFILE_DIR" >&2
++    return 1
++  }
++  case "$HARNESS" in
++    codex) CODEX_HOME=$ACCOUNT_PROFILE_DIR ;;
++    claude) CLAUDE_CONFIG_DIR=$ACCOUNT_PROFILE_DIR ;;
++  esac
++}
++
+@@ -1349,0 +1396,6 @@ fi
++# The dispatch profile decides the harness. This optional local selector is a
++# narrower boundary: it may choose only a credential profile for that exact
++# Codex or Claude harness. Its schema is validated here and any uncertainty
++# refuses the spawn instead of silently crossing provider or harness families.
++resolve_account_profile || exit 1
++
+@@ -2849 +2901 @@ preserve_relaunch_meta() {
+-      split("window endpoint_task_id worktree project harness kind mode yolo tasktmp model effort busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
++      split("window endpoint_task_id worktree project harness account_profile kind mode yolo tasktmp model effort busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+@@ -2860,0 +2913 @@ preserve_relaunch_meta() {
++  [ -z "$ACCOUNT_PROFILE" ] || echo "account_profile=$ACCOUNT_PROFILE"
+@@ -2987,0 +3041,6 @@ fi
++# Codex uses the same daemon-created pane boundary as Claude. Forward the
++# selected Codex store explicitly so a coordinator launched under an isolated
++# CODEX_HOME does not silently fall back to ~/.codex in the worker pane.
++if [ "$HARNESS" = codex ] && [ -n "${CODEX_HOME:-}" ]; then
++  LAUNCH="CODEX_HOME=$(shell_quote "$CODEX_HOME") $LAUNCH"
++fi
+@@ -3005,0 +3065,9 @@ if [ "$KIND" = secondmate ]; then
++  if [ -n "${FM_ACCOUNT_ROUTER:-}" ]; then
++    LAUNCH="FM_ACCOUNT_ROUTER=$(shell_quote "$FM_ACCOUNT_ROUTER") $LAUNCH"
++  fi
++  if [ -n "${FM_ACCOUNT_FLEET_CONFIG:-}" ]; then
++    LAUNCH="FM_ACCOUNT_FLEET_CONFIG=$(shell_quote "$FM_ACCOUNT_FLEET_CONFIG") $LAUNCH"
++  fi
++  if [ -n "${FM_ACCOUNT_ROUTER_STATE:-}" ]; then
++    LAUNCH="FM_ACCOUNT_ROUTER_STATE=$(shell_quote "$FM_ACCOUNT_ROUTER_STATE") $LAUNCH"
++  fi
+@@ -3153 +3221,3 @@ SPAWN_DELIVERY=
+-echo "spawned $ID harness=$HARNESS kind=$KIND$SPAWN_DELIVERY window=$META_WINDOW worktree=$WT"
++SPAWN_ACCOUNT=
++[ -z "$ACCOUNT_PROFILE" ] || SPAWN_ACCOUNT=" account=$ACCOUNT_PROFILE"
++echo "spawned $ID harness=$HARNESS$SPAWN_ACCOUNT kind=$KIND$SPAWN_DELIVERY window=$META_WINDOW worktree=$WT"
+diff --git a/bin/fm-teardown.sh b/bin/fm-teardown.sh
+index ad9e042..eded536 100755
+--- a/bin/fm-teardown.sh
++++ b/bin/fm-teardown.sh
+@@ -287,0 +288,15 @@ TEARDOWN_BACKLOG_SKIP_REASON=
++
++# Account leases are routing hints, not cleanup authority. Retire them only
++# after the task record has been removed successfully, and never turn a router
++# maintenance failure into permission to discard or repeat task cleanup.
++release_account_lease() {  # <task-id> [firstmate-home]
++  local task_id=$1 home=${2:-$FM_HOME}
++  [ -n "${FM_ACCOUNT_ROUTER:-}" ] || return 0
++  if [ ! -x "$FM_ACCOUNT_ROUTER" ]; then
++    echo "warning: account-router lease for $task_id was not released because the router is unavailable" >&2
++    return 0
++  fi
++  if ! "$FM_ACCOUNT_ROUTER" release --task-id "$task_id" --scope "$home" >/dev/null; then
++    echo "warning: account-router lease for $task_id could not be released; run account-router.mjs release manually" >&2
++  fi
++}
+@@ -686,0 +702 @@ remote_secondmate_teardown() {
++  release_account_lease "$ID"
+@@ -2538,0 +2555 @@ cleanup_firstmate_home_children() {
++    release_account_lease "$child_id" "$home"
+@@ -2910,0 +2928 @@ fi
++release_account_lease "$ID"
+diff --git a/tests/fm-spawn-dispatch-profile.test.sh b/tests/fm-spawn-dispatch-profile.test.sh
+index bf9c047..8c14f66 100755
+--- a/tests/fm-spawn-dispatch-profile.test.sh
++++ b/tests/fm-spawn-dispatch-profile.test.sh
+@@ -90,4 +90,3 @@ run_spawn() {
+-  # CLAUDE_CONFIG_DIR is forwarded onto claude launches by fm-spawn, so pin it
+-  # explicitly (empty by default) instead of leaking the invoking shell's value,
+-  # which would make launch assertions depend on the developer's environment.
+-  # A test opts in to the set case via FM_TEST_CLAUDE_CONFIG_DIR.
++  # The profile directories are forwarded onto matching launches by fm-spawn,
++  # so pin them explicitly (empty by default) instead of leaking the invoking
++  # shell's values into launch assertions. Tests opt in through FM_TEST_*.
+@@ -94,0 +94,4 @@ run_spawn() {
++    CODEX_HOME="${FM_TEST_CODEX_HOME:-}" \
++    FM_ACCOUNT_ROUTER="${FM_TEST_ACCOUNT_ROUTER:-}" \
++    FM_ACCOUNT_FLEET_CONFIG="${FM_TEST_ACCOUNT_FLEET_CONFIG:-}" \
++    FM_ACCOUNT_ROUTER_STATE="${FM_TEST_ACCOUNT_ROUTER_STATE:-}" \
+@@ -776,0 +780,89 @@ test_non_claude_harness_ignores_config_dir() {
++test_codex_forwards_firstmate_home_when_set() {
++  local rec id out status launch
++  id=profile-codex-home-z20
++  rec=$(make_spawn_case profile-codex-home codex "$id")
++  read_case_record "$rec"
++
++  out=$(FM_TEST_CODEX_HOME="/opt/test/codex-work" \
++    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
++  status=$?
++  expect_code 0 "$status" "codex spawn with CODEX_HOME set should succeed"
++  launch=$(cat "$LAUNCH_LOG")
++  assert_contains "$launch" "CODEX_HOME='/opt/test/codex-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS codex" \
++    "codex launch did not forward firstmate's CODEX_HOME to the crewmate pane"
++  pass "codex forwards firstmate's CODEX_HOME so the crewmate uses the same credential store"
++}
++
++test_codex_omits_home_prefix_when_unset() {
++  local rec id out status launch
++  id=profile-codex-nohome-z21
++  rec=$(make_spawn_case profile-codex-nohome codex "$id")
++  read_case_record "$rec"
++
++  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
++  status=$?
++  expect_code 0 "$status" "codex spawn without CODEX_HOME should succeed"
++  launch=$(cat "$LAUNCH_LOG")
++  assert_not_contains "$launch" "CODEX_HOME=" \
++    "codex launch must not add a home prefix when firstmate has no CODEX_HOME set"
++  pass "codex omits the home prefix when firstmate runs with the single-store default"
++}
++
++test_account_router_selects_only_inside_resolved_harness() {
++  local rec id out status launch router selected_dir router_log
++  id=profile-account-router-z22
++  rec=$(make_spawn_case profile-account-router codex "$id")
++  read_case_record "$rec"
++  router="$CASE_DIR/account-router"
++  selected_dir="$CASE_DIR/codex-account2"
++  router_log="$CASE_DIR/router.log"
++  mkdir -p "$selected_dir"
++  cat > "$router" <<'SH'
++#!/usr/bin/env bash
++printf '%s\n' "$*" >> "${FM_FAKE_ROUTER_LOG:?}"
++printf '{"schema":"firstmate.account-router-selection.v1","provider":"%s","harness":"%s","taskId":"%s","profile":"account2","selector":"CODEX_HOME","directory":"%s"}\n' "$3" "$3" "$5" "$FM_FAKE_ROUTER_DIRECTORY"
++SH
++  chmod +x "$router"
++
++  out=$(FM_TEST_ACCOUNT_ROUTER="$router" FM_FAKE_ROUTER_LOG="$router_log" \
++    FM_FAKE_ROUTER_DIRECTORY="$selected_dir" \
++    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
++  status=$?
++  expect_code 0 "$status" "Codex spawn with a valid same-provider account selection should succeed"
++  launch=$(cat "$LAUNCH_LOG")
++  assert_contains "$launch" "CODEX_HOME='$selected_dir' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS codex" \
++    "Codex launch did not use the account router's selected profile directory"
++  assert_grep "account_profile=account2" "$HOME_DIR/state/$id.meta" \
++    "task metadata did not retain the sanitized selected account label"
++  assert_grep "select --provider codex --task-id $id --scope $HOME_DIR" "$router_log" \
++    "spawn did not scope the account selection to the FirstMate home"
++  assert_not_contains "$launch" "CLAUDE_CONFIG_DIR=" \
++    "Codex account routing crossed into the Claude selector"
++  pass "account routing changes only the profile inside FirstMate's resolved Codex harness"
++}
++
++test_account_router_rejects_cross_provider_output() {
++  local rec id out status router selected_dir
++  id=profile-account-router-cross-z23
++  rec=$(make_spawn_case profile-account-router-cross codex "$id")
++  read_case_record "$rec"
++  router="$CASE_DIR/account-router"
++  selected_dir="$CASE_DIR/claude-account2"
++  mkdir -p "$selected_dir"
++  cat > "$router" <<'SH'
++#!/usr/bin/env bash
++printf '{"schema":"firstmate.account-router-selection.v1","provider":"claude","harness":"claude","taskId":"%s","profile":"account2","selector":"CLAUDE_CONFIG_DIR","directory":"%s"}\n' "$5" "$FM_FAKE_ROUTER_DIRECTORY"
++SH
++  chmod +x "$router"
++
++  out=$(FM_TEST_ACCOUNT_ROUTER="$router" FM_FAKE_ROUTER_DIRECTORY="$selected_dir" \
++    run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" 2>&1)
++  status=$?
++  [ "$status" -ne 0 ] || fail "cross-provider account-router output should refuse the spawn"
++  assert_contains "$out" "invalid or cross-provider selection" \
++    "cross-provider refusal did not explain the invalid selection"
++  assert_absent "$HOME_DIR/state/$id.meta" \
++    "cross-provider account-router output published task metadata"
++  pass "fm-spawn fails closed when an account router tries to change providers"
++}
++
+@@ -824,0 +917,4 @@ test_non_claude_harness_ignores_config_dir
++test_codex_forwards_firstmate_home_when_set
++test_codex_omits_home_prefix_when_unset
++test_account_router_selects_only_inside_resolved_harness
++test_account_router_rejects_cross_provider_output
+diff --git a/tests/fm-teardown.test.sh b/tests/fm-teardown.test.sh
+index fe0131c..a35d315 100755
+--- a/tests/fm-teardown.test.sh
++++ b/tests/fm-teardown.test.sh
+@@ -1342,0 +1343,28 @@ test_teardown_missing_busy_sidecar_completes() {
++test_teardown_releases_account_router_lease_after_record_removal() {
++  local case_dir rc router router_log
++  case_dir=$(make_case account-router-lease-release)
++  write_meta "$case_dir" local-only ship
++  router="$case_dir/account-router"
++  router_log="$case_dir/router.log"
++  cat > "$router" <<'SH'
++#!/usr/bin/env bash
++[ ! -e "${FM_FAKE_ROUTER_META:?}" ] || {
++  echo "router called before task record removal" >&2
++  exit 1
++}
++printf '%s\n' "$*" >> "${FM_FAKE_ROUTER_LOG:?}"
++printf '%s\n' '{"released":true}'
++SH
++  chmod +x "$router"
++
++  rc=0
++  FM_ACCOUNT_ROUTER="$router" FM_FAKE_ROUTER_LOG="$router_log" \
++    FM_FAKE_ROUTER_META="$case_dir/state/task-x1.meta" \
++    run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
++
++  expect_code 0 "$rc" "account-router lease release should not disturb successful teardown"
++  assert_grep "release --task-id task-x1 --scope $ROOT" "$router_log" \
++    "teardown did not release the task's home-scoped account lease"
++  pass "teardown releases the account lease only after removing the task record"
++}
++
+@@ -2616,0 +2645 @@ test_teardown_missing_busy_sidecar_completes
++test_teardown_releases_account_router_lease_after_record_removal

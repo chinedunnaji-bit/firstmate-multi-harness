@@ -111,7 +111,19 @@ FM_VERIFY_CLAUDE_PROFILES="account1 account2" \
   ./scripts/verify-all.sh
 ```
 
-This expands verification; it does not enable automatic fallback.
+Then reopen Account Fleet, select the new provider row, press `v`, and press
+`e` only when every readiness result is `yes`. Activation makes that profile
+eligible for the already-installed same-provider router. No dispatch JSON
+change is needed.
+
+Fixture tests prove automatic selection before a live second account exists:
+
+```sh
+node --test tests/account-router.test.mjs
+```
+
+The first real controlled rollover remains a required live verification after
+the new subscription is authenticated.
 
 ## Add only one provider account
 
@@ -207,19 +219,28 @@ FM_VERIFY_CLAUDE_PROFILES="account1 account3" \
   ./scripts/verify-all.sh
 ```
 
+Add the corresponding planned row in Account Fleet, then use `v` and `e`.
+Every active numbered profile participates automatically inside its own
+provider; account3 is never a new FirstMate harness.
+
 The verifier accepts `default` and any positive `accountN` label. It never
 discovers profiles automatically; only the lists you supply are checked.
 
-## Retire an account safely
+## Retire an account from routing
 
-Retiring a local profile does not close the vendor account or cancel a
-subscription. It removes that profile from this stack and clears its local CLI
-authentication.
+Press `r` in Account Fleet to retire a non-primary profile. This immediately
+excludes it from new account selections but does not close the vendor account,
+cancel a subscription, log out, uninstall hooks, or delete files. Existing task
+leases should be finished or deliberately relaunched before retirement.
 
-First finish or reconcile every worker using the profile. Remove it from any
-custom account router and from `FM_VERIFY_*_PROFILES` commands. The repository's
-default FirstMate launch uses account1 only, so unused account2 profiles require
-no dispatch-file change.
+Promote another verified active profile before retiring the current primary.
+Remove the retired label from `FM_VERIFY_*_PROFILES` commands. No dispatch-file
+change is required.
+
+## Log out and disable a retired profile
+
+Only after routing retirement and task reconciliation, use the provider-owned
+logout and Herdr integration commands below.
 
 For Codex account2:
 
@@ -264,7 +285,7 @@ stored credentials and that file-based credentials are stored under
 `CODEX_HOME`. Installed Claude help identifies `claude auth logout` as the
 account logout command.
 
-Sources: [OpenAI Codex authentication](https://developers.openai.com/codex/auth#check-authentication-or-sign-out),
+Sources: [OpenAI Codex authentication](https://learn.chatgpt.com/docs/auth),
 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-usage),
 [Herdr integrations](https://herdr.dev/docs/integrations/).
 
@@ -310,21 +331,23 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-account2" herdr integration install claude
 
 If the directory was archived, first move it back after confirming the active
 path does not exist. Repeat support-hook setup, the Claude Keychain quota check,
-and the selected-profile verifier before routing work to it.
+and the selected-profile verifier. In Account Fleet select the retired row,
+press `v`, then `e`; the profile returns to same-provider routing only after all
+readiness checks pass.
 
 ## Change the primary account
 
-The primary is chosen at coordinator launch, not in `crew-dispatch.json`. To
-promote account2 for both providers:
+The primary is chosen in Account Fleet, not in `crew-dispatch.json`. Verify and
+activate account2, select its row, and press `p`. Repeat independently for the
+other provider only if that is your intention. Then start the next coordinator
+through the launcher:
 
 ```sh
-cd "$HOME/src/firstmate"
-CODEX_HOME="$HOME/.codex-account2" \
-CLAUDE_CONFIG_DIR="$HOME/.claude-account2" \
-  pi
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh
 ```
 
-Verify both promoted profiles first. Do not retire account1 while live workers
-still use it. If one provider has no replacement account, remove or revise the
-dynamic dispatch rule that selects that provider before retiring its only
-usable profile.
+Promotion makes the new profile the first healthy choice but does not cross
+provider boundaries. Do not retire account1 while live workers still use it.
+If one provider has no replacement account, keep its only usable profile active
+or remove/revise the dynamic dispatch rule that selects that provider.

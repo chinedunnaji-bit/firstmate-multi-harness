@@ -168,10 +168,18 @@ an upstream update.
 
 ## Patch provenance
 
-`patches/firstmate-forward-codex-home.patch` changes one FirstMate worker launch
-boundary. It does not read credentials; it forwards the already-selected
-`CODEX_HOME` path as an environment prefix. The patch is tied to an audited
-FirstMate commit and must be re-reviewed if upstream source changes.
+`patches/firstmate-account-routing.patch` changes FirstMate's instructions,
+worker spawn boundary, teardown cleanup, and their tests. It does not read
+credentials. It invokes this repository's selector, validates that provider and
+harness are unchanged, forwards only the selected configuration-directory path,
+records a sanitized label, and releases a sanitized task lease. The patch is
+tied to an audited FirstMate commit and must be re-reviewed if upstream source
+changes.
+
+Router state is written mode `0600` under
+`$HOME/.local/state/firstmate-account-router/` by default. It contains hashed
+FirstMate-home scope IDs, task IDs, provider names, profile labels, and
+timestamps—not tokens, identities, quota amounts, or authentication payloads.
 
 ## Incident response
 

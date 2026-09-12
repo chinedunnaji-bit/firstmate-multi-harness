@@ -27,7 +27,7 @@ Before installing the agent stack, you need:
 
 ## Audited versions
 
-The following versions were installed and exercised through 2026-09-04:
+The following versions were installed and exercised through 2026-09-12:
 
 | Component | Audited version | Verification |
 | --- | ---: | --- |
@@ -39,7 +39,7 @@ The following versions were installed and exercised through 2026-09-04:
 | Herdr | 0.8.2 | `herdr --version` |
 | Treehouse | 2.3.0 | `treehouse --version` |
 | Codex CLI | 0.151.0 | `codex --version` |
-| Claude Code | 2.1.261 | `claude --version` |
+| Claude Code | 2.1.270 | `claude --version` |
 | `quota-axi` | 0.1.34 | `quota-axi --version` |
 | `tasks-axi` | 0.2.5 | `tasks-axi --version` |
 | `gh-axi` | 0.1.35 | `gh-axi --version` |
@@ -98,7 +98,7 @@ Installed package metadata showed:
 Pi 0.74.2: Node >=20.6.0
 Pi 0.84.4: Node >=22.19.0
 quota-axi 0.1.34: Node >=22.19
-Claude Code 2.1.261: Node >=22.0.0
+Claude Code 2.1.270: Node >=22.0.0
 ```
 
 This is why the clean path sets Node 22.21.1 as the NVM default before installing
@@ -126,7 +126,7 @@ Pi use of a Claude Pro/Max login draws from Anthropic extra usage rather than th
 normal Claude plan allowance. Choose deliberately.
 
 Sources: [Pi providers](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md),
-[Codex authentication](https://developers.openai.com/codex/auth),
+[Codex authentication](https://learn.chatgpt.com/docs/auth),
 [Claude Code environment variables](https://code.claude.com/docs/en/env-vars).
 
 ## Pre-install check

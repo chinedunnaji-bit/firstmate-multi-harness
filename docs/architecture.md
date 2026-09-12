@@ -141,6 +141,10 @@ explicit, automation-safe profile selection. They set only a
 configuration-directory environment variable and then execute the real harness
 with the original argument vector.
 
+This layer governs Codex CLI and Claude Code workers only. Pi's coordinator
+provider/model login is stored and selected by Pi itself; a Pi capacity failure
+cannot be repaired by changing `CODEX_HOME` or `CLAUDE_CONFIG_DIR`.
+
 Account Fleet is the local control surface for this additional layer:
 
 ```text
@@ -163,16 +167,19 @@ Account Fleet is the local control surface for this additional layer:
 The overlay is a Herdr v1 terminal-pane plugin, not a native sidebar extension.
 It never becomes a harness identifier and does not change
 `crew-dispatch.json`. `scripts/launch-firstmate.sh` consumes its primary
-selections at the coordinator boundary.
+selections and exports the account-router boundary to the coordinator.
 
 Current verified boundary:
 
-- `codex1` and `claude1` are authenticated and return fresh isolated quota
-  evidence.
+- `codex1` and `claude1` are independently authenticated and returned fresh
+  isolated quota evidence in the final audit. One earlier Codex read was stale,
+  proving that current evidence must still be rechecked at selection time.
 - The default and account2 profiles are optional and are not all quota-ready.
-- Automatic quota-aware selection across accounts is therefore not claimed as
-  working yet. It requires at least two usable profiles and a tested router
-  beneath the recognized harness name.
+- Automatic same-provider selection is implemented and fixture-tested beneath
+  the recognized harness name. FirstMate's real spawn regression proves the
+  selected directory is forwarded and cross-provider output is refused.
+- Live account-to-account rollover is not claimed until a second usable profile
+  exists and completes one controlled relaunch per provider.
 
 See [multi-account routing](multi-account-routing.md) for the exact status and
 the safe next architecture, [Account Fleet UI](account-ui.md) for the visual

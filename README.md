@@ -6,9 +6,10 @@ work with Treehouse.
 
 This repository uses one isolated primary account per commercial worker harness
 and supports optional numbered accounts when they are actually available.
-Account1 is the deterministic primary. Automatic quota-aware account fallback is
-an explicitly unfinished extension, not a feature claimed by the current clean
-path.
+Account1 is the deterministic initial primary. The included account router
+performs same-provider selection at each worker spawn or controlled relaunch: Codex may
+rotate only among active Codex profiles, and Claude only among active Claude
+profiles. It fails closed on stale, unknown, tied, or exhausted evidence.
 
 The repository also includes a secret-safe Herdr plugin with **Account Fleet**
 and **Computer Projects** terminal overlays. It can launch the FirstMate
@@ -18,7 +19,7 @@ authentication and project intake remain explicit, approval-gated operations.
 
 ## Verification status
 
-Audited on Apple Silicon macOS 26.3 through 2026-09-04:
+Audited on Apple Silicon macOS 26.3 through 2026-09-12:
 
 - the pinned command-line tools and their current help surfaces were checked;
 - FirstMate dispatch schema, precedence, supported harness names, and invalid
@@ -28,10 +29,10 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-04:
   profile pairs;
 - the account wrappers preserve arguments and select their intended profile;
 - `quota-axi` returned separate profile-scoped results;
-- Herdr accepted the Account Fleet plugin manifest, its 13 isolated account and
-  project discovery/lifecycle/approval/redaction tests pass, and
-  both primary profiles pass its sanitized live readiness view from the
-  documented NVM shell;
+- Herdr accepted the Account Fleet plugin manifest, its 26 isolated account,
+  router, project discovery, lifecycle, approval, and redaction tests pass, and
+  both primary profiles passed its sanitized live readiness view in the earlier
+  documented NVM-shell audit;
 - the Account Fleet pane opened successfully as a live Herdr overlay and
   rendered only the expected Codex/Claude account1 routing metadata;
 - the Account Fleet launch action created a live coordinator tab, ran the
@@ -43,10 +44,18 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-04:
 - an approved project intake created 26 managed-project records and 26 import
   briefs, and Herdr showed Codex workers operating in isolated Treehouse
   worktrees under the implementation-heavy dispatch rule;
-- a custom `CODEX_HOME` forwarding patch passed FirstMate's complete spawn
-  dispatch-profile regression;
-- the audit machine's primary Codex and Claude profiles are authenticated and
-  quota-readable.
+- the account selector's disposable-profile tests passed, covering primary
+  preference, same-provider rollover, sticky task leases, profile isolation,
+  threshold policy, stale/unknown/tied refusal, and cross-provider refusal;
+- the custom FirstMate patch passed the complete spawn dispatch-profile
+  regression, including account selection and malicious cross-provider output;
+- teardown passed the new proof that a task lease is released only after its
+  task record is removed. A later unrelated Herdr preflight case still failed,
+  so the complete teardown suite is not claimed green;
+- the audit machine returned fresh evidence for both primaries in the final
+  2026-09-12 full verification. One earlier probe that day returned
+  stale/unknown Codex evidence, which the router correctly treated as a blocker
+  rather than capacity.
 
 Still required before this build can claim end-to-end live routing:
 
@@ -54,8 +63,8 @@ Still required before this build can claim end-to-end live routing:
   provider/model ID;
 - dispatch one controlled Pi and Claude worker through the live coordinator,
   and carry one controlled Codex import through its complete delivery path;
-- implement and test automatic account fallback only after two accounts per
-  provider return current capacity evidence.
+- authenticate a second profile and execute one live controlled same-provider
+  rollover for each provider before claiming live multi-account failover.
 
 The default and account2 stores are optional and are not consulted by the clean
 primary-only verification path.
@@ -111,7 +120,7 @@ These are separate layers:
 | Orchestrator | FirstMate | Classifies tasks, dispatches workers, and reconciles work. |
 | Session backend | Herdr | Keeps worker terminal endpoints and sessions available. |
 | Code isolation | Treehouse | Leases isolated Git worktrees. |
-| Account routing | This repository's wrappers/profile convention | Selects an existing vendor credential store without copying it. |
+| Account routing | Account Fleet + `account-router.mjs` | Selects an active credential store inside the already-chosen provider without copying it. |
 | Provider capacity | `quota-axi` | Reports capacity evidence; it does not route or launch a worker. |
 
 FirstMate is not a model, harness executable, or terminal multiplexer. A
@@ -153,7 +162,7 @@ Audited core versions:
 
 ```text
 Node 22.21.1       Pi 0.84.4          Herdr 0.8.2
-Treehouse 2.3.0    Codex CLI 0.151.0  Claude Code 2.1.261
+Treehouse 2.3.0    Codex CLI 0.151.0  Claude Code 2.1.270
 No Mistakes 1.60.2
 ```
 
@@ -203,7 +212,7 @@ All commands in this section run in a normal macOS terminal.
    npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.4
    npm install -g \
      @openai/codex@0.151.0 \
-     @anthropic-ai/claude-code@2.1.261 \
+     @anthropic-ai/claude-code@2.1.270 \
      quota-axi@0.1.34 \
      tasks-axi@0.2.5 \
      gh-axi@0.1.35 \
@@ -395,11 +404,16 @@ claude2 optional   $HOME/.claude-account2
 Do not put `codex1` or `claude1` in FirstMate dispatch JSON. They are account
 launchers, not recognized harness identifiers.
 
+This account layer applies to Codex CLI and Claude Code workers. It does not
+change the model/provider login used by the running Pi coordinator; Pi keeps its
+own authentication under `PI_CODING_AGENT_DIR`.
+
 At the audited FirstMate commit, upstream worker launch already forwarded
-`CLAUDE_CONFIG_DIR` but not `CODEX_HOME`. This repository carries a minimal,
-tested patch for the Codex boundary. Automatic quota-aware fallback remains
-pending until the secondary accounts provide current evidence and a router is
-tested with real workers.
+`CLAUDE_CONFIG_DIR` but not `CODEX_HOME`, and it had no account-profile selector.
+This repository carries a tested patch that calls the local router after harness
+resolution, validates that its provider did not change, records the sanitized
+profile label, forwards the selected directory, and releases its task lease at
+teardown.
 
 Account verification:
 
@@ -407,6 +421,7 @@ Account verification:
 codex1 --version
 claude1 --version
 ./scripts/verify-harnesses.sh
+node --test tests/account-router.test.mjs
 ```
 
 See [multi-account routing](docs/multi-account-routing.md) for the sanitized
@@ -433,7 +448,10 @@ herdr plugin pane open \
 
 New profiles start as `planned` and cannot become active until wrapper,
 directory, login, Herdr integration, and strict quota checks all pass. Retire
-and forget operations do not log out or delete files. See
+and forget operations do not log out or delete files. Press `a` to enable or
+disable same-provider automatic selection for the selected provider; press `t`
+to set an explicit remaining-quota floor. The default floor is `0%`, so the
+repository does not invent a percentage policy. See
 [Account Fleet UI](docs/account-ui.md) for controls, security boundaries, and
 verification.
 

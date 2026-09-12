@@ -27,10 +27,13 @@ Each provider profile has one routing state:
 
 One active profile per provider is marked primary. `scripts/launch-firstmate.sh`
 reads those two primary selections, exports `CODEX_HOME` and
-`CLAUDE_CONFIG_DIR`, changes to the FirstMate clone, and executes Pi.
+`CLAUDE_CONFIG_DIR`, exports the registry/router paths, changes to the FirstMate
+clone, and executes Pi. Each provider also has an independent automatic-routing
+toggle and an explicit quota floor.
 
-The registry contains only provider names, local `accountN` labels, lifecycle
-states, and primary selections. Herdr stores it at:
+The registry contains only provider names, local `default`/`accountN` labels,
+lifecycle states, primary selections, routing toggles, and percentage floors.
+Herdr stores it at:
 
 ```sh
 printf '%s\n' \
@@ -99,12 +102,14 @@ L        verify both primary profiles and launch a coordinator tab
 /        send Pi's /login slash command to the idle coordinator
 Up/Down  select a profile
 v        verify the selected profile
-n        add a planned accountN label
+n        add a planned default or accountN label
 e        enable only after all readiness checks pass
 p        make an active profile primary
 r        retire a non-primary profile from routing
 x        forget a planned/retired registry entry
 c        show the exact setup commands
+a        toggle automatic same-provider selection for this provider
+t        set its explicit remaining-quota floor from 0 through 100 percent
 q        close the overlay
 ```
 
@@ -158,9 +163,9 @@ JSON.
 
 ## Add an account
 
-Press `n`, select `codex` or `claude`, and enter the positive account number.
-The new profile starts as `planned`, so adding the label cannot route work to an
-unfinished login.
+Press `n`, select `codex` or `claude`, and enter `default` or a positive account
+number. The new profile starts as `planned`, so adding the label cannot route
+work to an unfinished login.
 
 Press `c` to display the setup commands. Run them from the repository root in a
 normal terminal. Authentication remains an interactive vendor-CLI flow and
@@ -172,6 +177,18 @@ The command view also includes the tested `gh-axi`, `chrome-devtools-axi`, and
 
 Adding Codex and Claude accounts is independent; account numbers do not need to
 match.
+
+Once a row is active, it is eligible for new tasks and controlled relaunches in
+that provider. The router prefers the primary while it is healthy, keeps a
+healthy existing task lease, and considers other active rows only when the
+primary is unavailable. It never changes a Codex task into Claude or a Claude
+task into Codex.
+
+Press `a` to disable automatic selection for a provider. With routing off, new
+workers use that provider's primary without a quota probe. Press `t` to set a
+captain-defined percentage floor. The initial `0%` means only reported
+exhaustion triggers percentage-based switching; no hidden `1755` or other
+numeric cutoff is baked into this repository.
 
 ## Promote, retire, and remove
 
@@ -204,10 +221,11 @@ Run the deterministic tests and confirm the plugin is linked:
 ./scripts/verify-account-ui.sh
 ```
 
-The eight tests use disposable fake homes and fake harness/Herdr output. They
-prove the account lifecycle, primary selection, launch environment, duplicate
+The account and router tests use disposable fake homes and fake harness/Herdr
+output. They prove lifecycle, primary selection, same-provider rollover,
+cross-provider refusal, task leases, launcher environment, duplicate
 coordinator guard, exact Pi targeting, `/login` delivery, clean close, and
-redaction contract without touching a real vendor account.
+redaction without touching a real vendor account.
 
 For a sanitized live snapshot without opening the overlay:
 

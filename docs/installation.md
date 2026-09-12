@@ -90,7 +90,7 @@ Install the exact audited package set under Node 22:
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.4
 npm install -g \
   @openai/codex@0.151.0 \
-  @anthropic-ai/claude-code@2.1.261 \
+  @anthropic-ai/claude-code@2.1.270 \
   quota-axi@0.1.34 \
   tasks-axi@0.2.5 \
   gh-axi@0.1.35 \
@@ -340,26 +340,35 @@ hooks.
 
 ## 11. Configure FirstMate's Herdr backend and dynamic dispatch
 
-First apply the tested account-boundary patch. Current FirstMate already
-forwards `CLAUDE_CONFIG_DIR` into daemon-created Claude workers; this patch adds
-the symmetric `CODEX_HOME` forwarding required for an isolated Codex profile:
+First apply the tested account-routing patch. Current FirstMate already forwards
+`CLAUDE_CONFIG_DIR` into daemon-created Claude workers. This patch adds symmetric
+`CODEX_HOME` forwarding, invokes the same-provider selector after harness
+resolution, validates its result, records the sanitized label, and releases the
+task lease after successful teardown:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
-git -C "$HOME/src/firstmate" apply \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 bash -n "$HOME/src/firstmate/bin/fm-spawn.sh"
+bash -n "$HOME/src/firstmate/bin/fm-teardown.sh"
 ```
+
+`--unidiff-zero` is required because the tracked artifact omits context-only
+blank lines. The earlier revision check is therefore part of this procedure;
+do not apply this patch to an unreviewed FirstMate commit.
 
 The patch was checked against a clean clone of audited FirstMate commit
 `6c1d2db194cb20e08232ba2fa2c414592f724b44`. Its production change and set/unset
 profile cases passed FirstMate's complete
-`fm-spawn-dispatch-profile.test.sh` regression. If `git apply --check` fails on
+`fm-spawn-dispatch-profile.test.sh` regression. The selector itself is tested
+with disposable schema-v5 quota fixtures. If `git apply --check` fails on
 a later upstream revision, stop: inspect whether upstream now forwards
 `CODEX_HOME` itself rather than forcing the dated patch.
 
-The patch leaves the FirstMate checkout with one intentional tracked change.
+The patch leaves the FirstMate checkout with one intentional local patch set
+across its instructions, spawn/teardown scripts, and regression tests.
 See [daily usage](daily-usage.md) before updating FirstMate; an upstream update
 must preserve or replace this behavior.
 

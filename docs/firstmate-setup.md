@@ -26,27 +26,35 @@ The detached checkout pins the source used by this guide. FirstMate moves
 independently of this setup repository; preserve the exact revision in bug
 reports and treat an update as a new compatibility audit.
 
-## Apply the Codex profile-boundary patch
+## Apply the account-routing patch
 
 Current audited FirstMate explicitly forwards `CLAUDE_CONFIG_DIR` when launching
 a Claude worker in a daemon-created pane, but its Codex launch is a bare
 `codex`. That makes an isolated coordinator `CODEX_HOME` disappear at the
 worker boundary.
 
-Apply this repository's minimal symmetric patch:
+Apply this repository's audited local integration:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
-git -C "$HOME/src/firstmate" apply \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 ```
+
+The artifact deliberately uses zero-context hunks so blank patch-context markers
+do not become trailing whitespace in this public repository; that is why the
+commands require `--unidiff-zero`. Apply it only to the exact audited revision
+shown above, after the check succeeds.
 
 Verify:
 
 ```sh
 bash -n "$HOME/src/firstmate/bin/fm-spawn.sh"
+bash -n "$HOME/src/firstmate/bin/fm-teardown.sh"
 grep -F 'LAUNCH="CODEX_HOME=$(shell_quote "$CODEX_HOME") $LAUNCH"' \
+  "$HOME/src/firstmate/bin/fm-spawn.sh"
+grep -F 'resolve_account_profile || exit 1' \
   "$HOME/src/firstmate/bin/fm-spawn.sh"
 ```
 
@@ -54,14 +62,19 @@ Evidence:
 
 - the patch applied cleanly to a clean clone of the audited commit;
 - `bash -n` and `git diff --check` passed;
-- FirstMate's complete `fm-spawn-dispatch-profile.test.sh` passed in 86.773
-  seconds with 0 failures;
-- the regression included a set case proving the literal worker launch received
-  `CODEX_HOME`, and an unset case proving the single-store default stayed clean.
+- FirstMate's complete `fm-spawn-dispatch-profile.test.sh` passed with 0
+  failures;
+- the regression included same-provider selection and a deliberately malicious
+  cross-provider response that FirstMate refused before publishing metadata;
+- the standalone selector tests cover stale, unknown, tied, exhausted,
+  projected-exhaustion, threshold, sticky-lease, and multi-home cases;
+- the teardown suite passed its new lease-ordering case, then stopped later at
+  an unrelated Herdr preflight case, so the full teardown suite is not claimed
+  green.
 
 This is a custom addition, not an upstream FirstMate feature claim. If a later
-upstream release adds equivalent forwarding, remove the local patch rather than
-applying both.
+upstream release adds equivalent account-profile selection and cleanup, remove
+the local patch rather than applying both.
 
 ## Install the local configuration
 

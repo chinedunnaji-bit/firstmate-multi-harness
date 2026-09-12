@@ -1528,3 +1528,197 @@ not the architecture/review/writing class.
 Several worker states were intentional decision gates rather than dispatch
 failures: three requested provenance/redistribution decisions, and one found no
 project files to import. No worker result was merged by this inspection.
+
+## 2026-09-12
+
+### Same-provider account routing gap
+
+Goal: explain why an existing `harness=codex` task did not switch from one
+Codex account profile to another after the provider reported a usage limit.
+
+Read-only inspection covered the Account Fleet registry, launcher, installed
+FirstMate spawn/relaunch paths, teardown, `fm-procevent-quota.sh`, and the
+installed quota-array skill. Relevant commands included:
+
+```sh
+git -C "$HOME/src/firstmate" status --short
+rg -n 'CODEX_HOME|CLAUDE_CONFIG_DIR|HARNESS=|relaunch' \
+  "$HOME/src/firstmate/bin" "$HOME/src/firstmate/AGENTS.md"
+quota-axi --provider codex --json --no-credential-refresh
+```
+
+Actual result: FirstMate selected harnesses correctly, and the earlier custom
+patch forwarded the coordinator's fixed `CODEX_HOME`. It did not call an
+account selector, persist an account assignment, or choose a new same-provider
+profile during relaunch. The quota process-event helper only wakes FirstMate at
+a threshold; it does not change a running process's credential store.
+
+The current strict Codex checks for account1 and the default store returned
+stale/unknown evidence with no usable `spendPriority`. No quota amounts or
+identity fields were recorded. No `1755` account-routing threshold was present
+in FirstMate, Account Fleet, or quota-axi configuration. OpenAI documentation
+also describes changing usage limits rather than one universal numeric cutoff.
+
+Root cause: the original design correctly separated harness and account layers,
+but implementation stopped after deterministic primary-directory forwarding.
+The absence of real account2 subscriptions was incorrectly allowed to postpone
+the selector itself instead of postponing only its live rollover test.
+
+### Account router implementation
+
+Resolution: add `scripts/account-router.mjs` below FirstMate harness dispatch.
+It reads the sanitized Account Fleet registry, probes only active profiles in
+the requested provider, keeps healthy task leases, prefers the healthy primary,
+ranks usable alternates by schema-v5 `selection.spendPriority`, and fails closed
+on stale, unknown, tied, projected-exhaustion, or exhausted evidence. The
+default captain floor is `0%`; non-zero percentage floors are explicit UI/CLI
+policy rather than invented defaults.
+
+The router state uses mode `0600`. FirstMate-home paths are hashed into lease
+keys so equal task IDs in separate homes cannot collide. Credential content,
+identity, and raw quota payloads are neither stored nor printed.
+
+Account Fleet 0.4.0 gained `a` (automatic routing on/off), `t` (captain quota
+floor), and optional `default` profile support. `scripts/launch-firstmate.sh`
+now exports the registry, router, and router-state paths to Pi.
+
+The installed audited FirstMate clone was extended so `fm-spawn.sh` calls the
+router only after the harness is resolved, validates that the returned provider
+and harness are unchanged, sets only `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, and
+records only `account_profile=...`. `fm-teardown.sh` releases a task lease only
+after successful task-record removal. Recovery guidance now uses the ordinary
+controlled relaunch boundary and explicitly forbids cross-harness capacity
+fallback. The complete reproducible change is stored in:
+
+```text
+patches/firstmate-account-routing.patch
+```
+
+### Verification and encountered test-environment failures
+
+Command:
+
+```sh
+node --test tests/account-router.test.mjs tests/account-fleet.test.mjs
+```
+
+Actual result: all 20 tests passed at this milestone. A later concurrency case
+raised the final combined total to 26 tests, including 13 router cases. Router
+coverage includes primary preference, same-provider exhaustion rollover,
+sticky leases, alternate ranking, stale/tied/projected-exhaustion refusal,
+cross-provider refusal,
+optional default profile, explicit threshold, routing-off behavior, lease
+release, multi-home isolation, and proof that vendor probes run outside the
+lease lock.
+
+The first direct FirstMate regression attempt failed before executing its test
+logic because the restricted environment prevented the suite's process-identity
+helper from initializing:
+
+```text
+fm_test_tmproot: command not found
+```
+
+Root cause: `tests/lib.sh` returned early after its PID identity probe was denied
+inside the restricted sandbox. The working verification was the same suite with
+ordinary process-inspection permission:
+
+```sh
+cd "$HOME/src/firstmate"
+tests/fm-spawn-dispatch-profile.test.sh
+```
+
+Actual result: the complete spawn dispatch-profile file passed, including the
+new same-provider selection and malicious cross-provider-response refusal.
+
+The first teardown invocation then stopped because its shell resolved Node 20
+while `tasks-axi` existed only in the audited Node 22 NVM bin directory:
+
+```text
+tests/fm-teardown.test.sh: line 542: tasks-axi: command not found
+```
+
+Resolution and command:
+
+```sh
+PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH" \
+  tests/fm-teardown.test.sh
+```
+
+The new account-lease ordering test passed. The broader file later stopped at:
+
+```text
+not ok - herdr-preflight-missing-adapter: teardown continued without its required preflight
+```
+
+That later case does not exercise the new lease helper, and no claim is made
+that the complete teardown suite passed. It remains a separate FirstMate test
+issue to re-audit rather than an error to hide or relabel.
+
+Live account-to-account rollover remains unverified until a real second Codex
+or Claude account is independently authenticated, activated, and exercised by
+one controlled same-provider relaunch.
+
+### Herdr plugin refresh
+
+Goal: refresh the linked plugin after increasing its manifest to 0.4.0.
+
+The first link attempt inside the restricted execution environment failed:
+
+```text
+Error: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+```
+
+Root cause: Herdr's user-level plugin registry is outside the repository write
+sandbox. Re-running the same reviewed command with ordinary user permission
+succeeded:
+
+```sh
+herdr plugin link plugins/account-fleet --enabled
+```
+
+Verification returned sanitized fields only:
+
+```text
+plugin_id: firstmate.account-fleet
+version: 0.4.0
+enabled: true
+```
+
+All 26 isolated Account Fleet, account-router, and Computer Projects tests then
+passed. The Herdr server was running with zero workspaces after the user closed
+its window, so no live overlay was opened or invented as a successful test in
+this update.
+
+### Claude Code pin refreshed after full verification
+
+Goal: run the repository's complete read-only verifier against the live machine.
+
+Command:
+
+```sh
+PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH" \
+  ./scripts/verify-all.sh
+```
+
+Actual result: the harness, Herdr integration, FirstMate, and Account Fleet
+groups passed. Both active `account1` profiles had usable vendor login state and
+fresh strict quota evidence. All 26 isolated UI/router tests passed. The
+prerequisite group alone failed because the live Claude Code version had moved
+from the previously audited 2.1.261 to 2.1.270:
+
+```text
+FAIL: claude version is '2.1.270 (Claude Code)'; this guide audited '2.1.261 (Claude Code)'
+```
+
+Root cause: the installed executable was newer than the repository's exact
+reproducibility pin. This was version-record drift, not a harness, authentication,
+quota, or routing failure.
+
+Resolution: after verifying `claude --version` directly, update the clean-path
+package pin and exact-version check to the observed 2.1.270 release, then rerun
+the complete verifier.
+
+Verification: the second `verify-all.sh` run completed with all five groups
+passing and zero failures. The installed 2.1.270 package metadata also reported
+its Node requirement as `>=22.0.0`.

@@ -136,6 +136,14 @@ claude --continue
 claude --resume
 ```
 
+For this stack's Pi coordinator, preserve the account-router environment by
+resuming through the repository launcher rather than invoking bare Pi:
+
+```sh
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh --continue
+```
+
 Codex, Claude, and Pi also have current Herdr integrations for native session
 identity/restore. Herdr can restore supported agent sessions after a server
 restart when the required integration revision is current.
@@ -248,39 +256,42 @@ FirstMate bootstrap, and at least one controlled worker lifecycle.
 
 ## Update FirstMate while preserving the local patch
 
-The audited FirstMate checkout has one intentional tracked change. Before an
+The audited FirstMate checkout has one intentional local patch set. Before an
 upstream update, finish active work and inspect:
 
 ```sh
 git -C "$HOME/src/firstmate" status --short
-git -C "$HOME/src/firstmate" diff -- bin/fm-spawn.sh
+git -C "$HOME/src/firstmate" diff -- \
+  AGENTS.md bin/fm-spawn.sh bin/fm-teardown.sh tests
 ```
 
 The following reverse-check/apply sequence was validated against the staged
 patch. First confirm the reverse check succeeds:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --reverse --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --reverse --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 ```
 
 Only after reviewing that result, remove the patch, update by fast-forward, and
 inspect the new source:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --reverse \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --reverse \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 git -C "$HOME/src/firstmate" switch main
 git -C "$HOME/src/firstmate" pull --ff-only
-grep -n 'CODEX_HOME' "$HOME/src/firstmate/bin/fm-spawn.sh"
+grep -n 'resolve_account_profile\|CODEX_HOME' \
+  "$HOME/src/firstmate/bin/fm-spawn.sh"
 ```
 
-If upstream now forwards `CODEX_HOME` into Codex worker launches, do not reapply
-the patch. If it does not, first verify the dated patch still applies cleanly:
+If upstream now provides equivalent same-provider profile selection, Codex home
+forwarding, task metadata, recovery guidance, and lease cleanup, do not reapply
+the patch. Otherwise first verify the dated patch still applies cleanly:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 ```
 
 Apply it only after that check succeeds. Then rerun FirstMate bootstrap,

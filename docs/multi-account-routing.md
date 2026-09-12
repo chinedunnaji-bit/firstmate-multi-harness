@@ -36,7 +36,7 @@ file-backed Codex credentials, and Herdr's current Codex integration honors the
 same selector. Herdr requires the selected directory to exist before integration
 installation.
 
-Sources: [OpenAI Codex authentication](https://developers.openai.com/codex/auth#credential-storage),
+Sources: [OpenAI Codex authentication](https://learn.chatgpt.com/docs/auth),
 [Herdr Codex integration](https://herdr.dev/docs/integrations/#codex).
 
 ## Executable wrappers
@@ -125,29 +125,30 @@ to exist until their accounts are enabled.
 
 ## Preferred account at the FirstMate boundary
 
-Launch the Pi coordinator with primary profile variables:
+Launch the Pi coordinator through the repository launcher:
 
 ```sh
-cd "$HOME/src/firstmate"
-CODEX_HOME="$HOME/.codex-account1" \
-CLAUDE_CONFIG_DIR="$HOME/.claude-account1" \
-  pi
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh
 ```
 
-Audited FirstMate already forwards `CLAUDE_CONFIG_DIR` into a Claude worker's
-daemon-created pane. It did not forward `CODEX_HOME`, so this repository carries
-a tested minimal patch that adds the symmetric prefix to Codex worker launches.
-Without that patch, setting `CODEX_HOME` only on the coordinator does not prove
-that a worker created by the long-lived Herdr daemon uses the same account.
+The launcher exports the registry and account-router paths as well as both
+primary directories. Audited FirstMate already forwarded `CLAUDE_CONFIG_DIR`
+into a Claude worker's daemon-created pane. It did not forward `CODEX_HOME` or
+select among provider profiles, so this repository carries the tested
+`patches/firstmate-account-routing.patch` integration.
 
-This establishes deterministic primary-account routing:
+The boundary is now:
 
 ```text
-FirstMate -> codex harness -> $HOME/.codex-account1
-FirstMate -> claude harness -> $HOME/.claude-account1
+FirstMate dispatch -> codex harness  -> account router -> CODEX_HOME
+FirstMate dispatch -> claude harness -> account router -> CLAUDE_CONFIG_DIR
 ```
 
-It does not yet implement automatic fallback.
+The patch validates that the router returns the same provider and harness that
+FirstMate already chose. It records only `account_profile=accountN` in task
+metadata. A malformed or cross-provider result refuses before task metadata or
+a worker endpoint is published.
 
 ## Actual quota isolation test
 
@@ -161,18 +162,22 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-account1" \
   quota-axi --provider claude --json --no-credential-refresh
 ```
 
-Sanitized result matrix:
+Sanitized historical result matrix from the earlier profile-isolation audit:
 
 | Provider profile | Vendor auth check | Strict quota state |
 | --- | --- | --- |
 | Codex default | reported a stored login | stale/unavailable |
 | Codex account1 | authenticated | fresh |
-| Codex account2 | reported a stored login | stale/unavailable |
+| Codex account2 directory | reported a stored login | stale/unavailable |
 | Claude default | not authenticated | unavailable |
 | Claude account1 | authenticated | fresh |
-| Claude account2 | not authenticated | unavailable |
+| Claude account2 directory | not authenticated | unavailable |
 
 No identity, quota amount, token, or credential content was recorded.
+
+The presence of a directory or old stored-login signal does not prove that the
+operator owns a usable second subscription. These optional rows remain outside
+active routing until their own login and readiness verification succeed.
 
 This proves that `quota-axi` reads the selected profile separately. It also
 proves that a vendor `login status` success is not always sufficient capacity
@@ -202,36 +207,70 @@ CREW_DISPATCH: invalid config/crew-dispatch.json - unverified harness: codex1
 
 Keep the recognized harness constant and route the account below it.
 
-## Automatic quota-aware account fallback: current boundary
+## Automatic same-provider account selection
 
-Automatic account fallback is not declared working. Two conditions remain:
+`scripts/account-router.mjs` is implemented and fixture-tested. On every Codex
+or Claude worker spawn or controlled relaunch it:
 
-1. at least two accounts per provider must return usable current quota evidence;
-2. a router beneath the recognized `codex`/`claude` executable boundary must be
-   implemented and tested with real FirstMate workers.
+1. reads only active profiles for the already-selected provider;
+2. asks `quota-axi --json --no-credential-refresh` separately under each
+   profile directory;
+3. requires schema version 5, a fresh non-stale provider report, known
+   all-model availability, and usable runway;
+4. keeps an existing healthy task lease so a long task does not oscillate;
+5. otherwise prefers the configured primary;
+6. if the primary is exhausted or below an explicit captain floor, ranks usable
+   same-provider alternates by known `selection.spendPriority`;
+7. refuses stale, unknown, projected-exhaustion, unrankable, tied, or
+   all-exhausted choices;
+8. returns only the selector name, profile label, directory, reason, and
+   sanitized capacity evidence.
 
-The safe router contract is:
+The default captain floor is `0%`. This means provider-reported exhaustion is
+actionable without inventing a generic percentage. Set a non-zero floor only as
+an explicit local policy:
 
-1. keep account1 first as the preferred candidate;
-2. run one strict, profile-scoped `quota-axi` query per candidate;
-3. treat stale, missing, and unknown evidence as uncertainty, not as invented
-   capacity;
-4. reject a candidate only on a definitive auth/capacity failure;
-5. use the published all-model `selection.spendPriority` only when it is known
-   and comparable;
-6. incorporate task completion/runway requirements before switching;
-7. stop on an unresolved genuine tie or all-uncertain state;
-8. export only the chosen config directory and `exec` the real harness with
-   `"$@"`;
-9. never refresh credentials, print identity, or rewrite a profile during
-   selection.
+```sh
+node plugins/account-fleet/account-fleet.mjs --threshold codex 15
+node plugins/account-fleet/account-fleet.mjs --threshold claude 15
+```
 
-This mirrors FirstMate's conservative quota-array reasoning instead of treating
-a raw remaining percentage as a complete routing decision.
+There is no verified `1755` account-switch cutoff in this stack. OpenAI's
+current Codex documentation says usage limits vary with model and task
+complexity; current limits are inspected through the product status surface,
+not treated as one permanent cross-account number.
 
-Once secondary accounts are authenticated, implement the router behind
-`codex`/`claude`, not as new FirstMate harness identifiers, and preserve the
-primary wrappers for explicit manual selection.
+Source: [OpenAI Codex pricing and usage limits](https://learn.chatgpt.com/docs/pricing).
+
+The router runs at a process boundary because a running Codex or Claude process
+cannot change credential stores in place. If a live worker later hits a quota or
+credential stop, FirstMate preserves its worktree and uses its ordinary
+controlled relaunch. The replacement keeps the original harness and re-runs the
+account selector. If no same-provider profile is provably usable, the relaunch
+stops; it never falls through from Codex to Claude or vice versa.
+
+Inspect leases without seeing credentials:
+
+```sh
+./scripts/account-router.mjs status
+```
+
+Lease keys hash the FirstMate home and include the task ID, so identical task
+names in different FirstMate homes do not collide. Teardown removes a lease
+only after the corresponding task record is successfully removed.
+
+The selector is tested with disposable quota fixtures, including actual
+FirstMate spawn validation and cross-provider rejection. Live account-to-account
+rollover is not yet claimed because this machine currently has no verified
+Codex account2 or Claude account2. Adding one later activates the already-built
+path; it does not require a new harness identifier or dispatch rule.
+
+Verify the deterministic implementation:
+
+```sh
+node --test tests/account-router.test.mjs
+FIRSTMATE_REPO="$HOME/src/firstmate" ./scripts/verify-firstmate.sh
+```
 
 For the tested add, retire, archive, reactivate, promote, and selected-profile
 verification procedures, see [account lifecycle](account-lifecycle.md).

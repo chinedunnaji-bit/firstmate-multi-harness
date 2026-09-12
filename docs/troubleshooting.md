@@ -345,7 +345,7 @@ is detected.
 ```sh
 ./scripts/verify-account-ui.sh
 herdr plugin list --plugin firstmate.account-fleet --json \
-  | jq -e '.result.plugins[0].version == "0.2.1"'
+  | jq -e '.result.plugins[0].version == "0.4.0"'
 ```
 
 The launch regression uses a fake `pane run` that exits successfully with
@@ -361,8 +361,11 @@ Sources: [Herdr v0.8.2 `pane run` implementation](https://github.com/herdrdev/he
 `codex login status` returns success for a profile, while strict `quota-axi`
 output reports stale or unavailable evidence.
 
-This was observed for the default and account2 Codex profiles; account1
-returned fresh evidence.
+The initial audit observed stale/unavailable evidence for the default and
+account2 directories while account1 was fresh. On 2026-09-12, one read-only
+check found account1 stale/unknown and the final full verification returned
+fresh evidence. Quota state is time-dependent; do not promote either result
+into a permanent claim.
 
 If you do not own the optional profile, this is not a setup failure. Leave it
 unselected; the verifier checks account1 only by default.
@@ -400,8 +403,134 @@ CODEX_HOME="$HOME/.codex-account2" \
   quota-axi --provider codex --json --no-credential-refresh
 ```
 
-Require current, usable evidence before adding the profile to automatic
-fallback.
+Require current, usable evidence before marking the profile active in Account
+Fleet.
+
+## Account routing refuses because capacity evidence is stale or exhausted
+
+### Symptom
+
+A Codex or Claude spawn/relaunch stops with output shaped like:
+
+```text
+account-router: codex account routing stopped (no_usable_profile); account1:stale
+error: codex account selection failed; the harness was not changed
+```
+
+Or the worker itself reports a provider usage limit and repeated FirstMate
+watcher wakes keep pointing at the same failed pane.
+
+### Why it happens
+
+The router intentionally refuses to interpret stale, unknown, tied,
+projected-exhaustion, or exhausted evidence as capacity. Before this router was
+wired into `fm-spawn`, an existing Codex task also retained only
+`harness=codex`; a relaunch had no mechanism to select `codex1` or another
+Codex profile. Watcher repetition described the same blocked worker—it did not
+create a safe cross-provider fallback.
+
+### Diagnosis
+
+Inspect sanitized registry and lease metadata:
+
+```sh
+node plugins/account-fleet/account-fleet.mjs --snapshot
+./scripts/account-router.mjs status
+```
+
+Then inspect one selected provider profile locally. Raw quota JSON may contain
+private capacity details, so do not paste or commit it:
+
+```sh
+CODEX_HOME="$HOME/.codex-account1" \
+  quota-axi --provider codex --json --no-credential-refresh
+```
+
+### Fix
+
+If another same-provider account exists, finish its independent login and hook
+setup, verify it in Account Fleet with `v`, and activate it with `e`. Preserve
+the task's worktree and use FirstMate's controlled relaunch; the replacement
+spawn keeps `harness=codex` and may select the new Codex profile.
+
+If no second same-provider account exists, wait for reset or reauthenticate the
+same profile. Do not add `claude` as a fallback for a Codex task, and do not mark
+an unverified directory active merely to suppress the error.
+
+### Verify
+
+```sh
+node --test tests/account-router.test.mjs
+FIRSTMATE_REPO="$HOME/src/firstmate" ./scripts/verify-firstmate.sh
+```
+
+After adding a real alternate, the final proof is a controlled live relaunch
+whose task metadata keeps `harness=codex` (or `claude`) while
+`account_profile=` changes within that provider. That live proof remains
+pending on this machine until a second account is available.
+
+## The Pi coordinator hits its own ChatGPT usage limit
+
+### Symptom
+
+The FirstMate coordinator itself repeatedly reports:
+
+```text
+Error: You have hit your ChatGPT usage limit ...
+Auto-compaction failed: Summarization failed: Codex error: The usage limit has been reached
+```
+
+Watcher wake messages may continue to arrive but Pi cannot process them into a
+successful FirstMate turn.
+
+### Why it happens
+
+Pi's coordinator model authenticates through Pi's own provider store under
+`PI_CODING_AGENT_DIR` (normally `$HOME/.pi/agent`). That is a different layer
+from a Codex CLI worker's `CODEX_HOME` and a Claude Code worker's
+`CLAUDE_CONFIG_DIR`. The account router implemented here therefore cannot switch
+the running Pi coordinator between `codex1`, `codex2`, `claude1`, or `claude2`.
+
+The repeated watcher messages describe queued supervision work; they do not
+make a rejected provider request succeed.
+
+### Diagnosis
+
+Confirm which pane is failing. If the error appears in the Pi + FirstMate
+coordinator pane, it is coordinator capacity, not a Codex or Claude worker
+account assignment. Use Pi's `/session` and model footer locally; do not publish
+identity or credential output.
+
+### Fix
+
+If the coordinator cannot complete any turn, enter the verified Pi slash
+command below to stop only Pi and end the repeated failed turns:
+
+```text
+/quit
+```
+
+Herdr and separate worker panes remain distinct processes. Wait for the
+coordinator provider to reset, or explicitly use Pi's `/login` to select another
+provider you intend to use. This is a manual coordinator decision, not an
+automatic Codex-to-Claude worker fallback.
+
+Resume the saved coordinator session through the repository launcher so the
+account-router environment is restored:
+
+```sh
+cd "$HOME/src/firstmate-multi-harness"
+./scripts/launch-firstmate.sh --continue
+```
+
+### Verify
+
+After resume, ask for a harmless status report and confirm one successful Pi
+turn before allowing it to handle queued wakes. Then run:
+
+```sh
+FIRSTMATE_REPO="$HOME/src/firstmate" ./scripts/verify-firstmate.sh
+```
 
 ## Claude default or account2 reports not authenticated
 
@@ -642,15 +771,16 @@ It checks for the tested production change without displaying profile content.
 For the audited commit, apply the repository patch:
 
 ```sh
-git -C "$HOME/src/firstmate" apply --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
-git -C "$HOME/src/firstmate" apply \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 bash -n "$HOME/src/firstmate/bin/fm-spawn.sh"
 ```
 
 Run those patch commands from this setup repository. The patch adds both
-production behavior and regression cases for a set and unset `CODEX_HOME`.
+production behavior and regression cases for profile selection, set/unset
+`CODEX_HOME`, and cross-provider refusal.
 
 If `git apply --check` fails after a FirstMate update, inspect upstream first:
 it may already implement equivalent forwarding. Do not force-apply a dated
@@ -757,7 +887,7 @@ as trailing whitespace.
 ```sh
 git diff --check
 git diff --cached --check
-grep -n '[[:blank:]]$' patches/firstmate-forward-codex-home.patch
+grep -n '[[:blank:]]$' patches/firstmate-account-routing.patch
 ```
 
 ### Fix
@@ -772,8 +902,8 @@ a clean FirstMate clone.
 ```sh
 git diff --check
 git diff --cached --check
-git -C "$HOME/src/firstmate" apply --check \
-  "$HOME/src/firstmate-multi-harness/patches/firstmate-forward-codex-home.patch"
+git -C "$HOME/src/firstmate" apply --unidiff-zero --check \
+  "$HOME/src/firstmate-multi-harness/patches/firstmate-account-routing.patch"
 ```
 
 The corrected artifact applied to the audited FirstMate commit, produced files

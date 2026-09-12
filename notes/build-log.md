@@ -1722,3 +1722,31 @@ the complete verifier.
 Verification: the second `verify-all.sh` run completed with all five groups
 passing and zero failures. The installed 2.1.270 package metadata also reported
 its Node requirement as `>=22.0.0`.
+
+### Public repository creation and first push transport failure
+
+Goal: create the requested public GitHub repository and push the audited `main`
+branch.
+
+Command:
+
+```sh
+gh repo create firstmate-multi-harness --public --source=. --remote=origin --push
+```
+
+Actual result: GitHub created the public, empty repository, but the push failed:
+
+```text
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+failed to run git: exit status 128
+```
+
+Diagnosis confirmed that the new `origin` used the SSH URL while this machine
+did not have an accepted GitHub SSH key for that transport. `gh repo view`
+confirmed that the repository existed, was public, and was still empty; no
+partial code publication occurred.
+
+Resolution: change only this repository's `origin` to the HTTPS clone URL, keep
+the user's global GitHub CLI configuration unchanged, rerun the publication
+checks, and push `main` without force.

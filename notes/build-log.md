@@ -1750,3 +1750,17 @@ partial code publication occurred.
 Resolution: change only this repository's `origin` to the HTTPS clone URL, keep
 the user's global GitHub CLI configuration unchanged, rerun the publication
 checks, and push `main` without force.
+
+Working commands:
+
+```sh
+git remote set-url origin \
+  https://github.com/chinedunnaji-bit/firstmate-multi-harness.git
+./scripts/check-publication.sh
+git push -u origin main
+```
+
+Actual result: the publication checker reported zero failures, HTTPS push
+succeeded, and local `main` began tracking `origin/main`. Final remote
+verification with `gh repo view` reported `visibility=PUBLIC`, `isEmpty=false`,
+and default branch `main`.

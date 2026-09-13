@@ -34,6 +34,7 @@ function withIsolatedEnvironment(callback) {
     "FM_FIRSTMATE_HOME",
     "HERDR_BIN_PATH",
     "HERDR_ENV",
+    "HERDR_PLUGIN_CONFIG_DIR",
     "HERDR_PLUGIN_ROOT",
     "HERDR_WORKSPACE_ID",
     "FAKE_HERDR_LOG",
@@ -48,6 +49,7 @@ function withIsolatedEnvironment(callback) {
   process.env.HOME = temporary;
   process.env.PATH = `${path.join(temporary, "bin")}:${previous.PATH ?? ""}`;
   process.env.FM_ACCOUNT_FLEET_CONFIG = path.join(temporary, "config", "accounts.json");
+  delete process.env.HERDR_PLUGIN_CONFIG_DIR;
   fs.mkdirSync(path.join(temporary, "bin"), { recursive: true });
 
   try {
@@ -195,6 +197,21 @@ test("command-line enable verifies readiness before activating a planned profile
     );
     assert.equal(
       registry.providers.claude.profiles.find((profile) => profile.label === "account2")?.state,
+      "planned",
+    );
+
+    installReadyFixtures(home, "claude", 3);
+    executable(
+      path.join(home, "bin", "quota-axi"),
+      'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":0,"runway":{"status":"exhausted_now"}}]}}]}\'; exit 0',
+    );
+    addProfile(registry, "claude", "account3");
+    assert.throws(
+      () => enableVerifiedProfile(registry, "claude", "account3"),
+      /profile is not ready/,
+    );
+    assert.equal(
+      registry.providers.claude.profiles.find((profile) => profile.label === "account3")?.state,
       "planned",
     );
   });

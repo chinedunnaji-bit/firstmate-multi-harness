@@ -395,8 +395,8 @@ function verifyProfile(provider, label) {
     const quotaState = quotaReport?.state;
     const availability = quotaReport?.quotaSemantics?.effectiveAvailability;
     const scope = Array.isArray(availability)
-      ? availability.find((candidate) =>
-          candidate.scope === "all_models" || candidate.scope === "all_products")
+      ? availability.find((candidate) => candidate.scope === "all_models") ||
+        availability.find((candidate) => candidate.scope === "all_products")
       : null;
     const remaining = scope?.effectivePercentRemaining;
     const runway = scope?.runway?.status;

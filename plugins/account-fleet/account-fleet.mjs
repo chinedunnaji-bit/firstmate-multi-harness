@@ -51,6 +51,15 @@ function configPath() {
   if (process.env.HERDR_PLUGIN_CONFIG_DIR) {
     return path.join(process.env.HERDR_PLUGIN_CONFIG_DIR, "accounts.json");
   }
+  const herdr = spawnSync(
+    process.env.HERDR_BIN_PATH || "herdr",
+    ["plugin", "config-dir", "firstmate.account-fleet"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const pluginConfigDirectory = herdr.status === 0 ? herdr.stdout.trim() : "";
+  if (pluginConfigDirectory) {
+    return path.join(pluginConfigDirectory, "accounts.json");
+  }
   return path.join(
     os.homedir(),
     ".config",
@@ -380,9 +389,27 @@ function verifyProfile(provider, label) {
       selector,
     );
     const quotaJson = parseJson(quota.stdout);
-    const quotaState = quotaJson?.providers?.[0]?.state;
+    const quotaReport = quotaJson?.providers?.find?.(
+      (candidate) => candidate.provider === provider,
+    );
+    const quotaState = quotaReport?.state;
+    const availability = quotaReport?.quotaSemantics?.effectiveAvailability;
+    const scope = Array.isArray(availability)
+      ? availability.find((candidate) =>
+          candidate.scope === "all_models" || candidate.scope === "all_products")
+      : null;
+    const remaining = scope?.effectivePercentRemaining;
+    const runway = scope?.runway?.status;
     checks.quota =
-      quota.status === 0 && quotaState?.status === "fresh" && quotaState?.stale === false;
+      quota.status === 0 &&
+      quotaJson?.schemaVersion === 5 &&
+      quotaState?.status === "fresh" &&
+      quotaState?.stale === false &&
+      scope?.status === "known" &&
+      typeof remaining === "number" &&
+      Number.isFinite(remaining) &&
+      remaining > 0 &&
+      (runway === "through_reset" || runway === "projected_exhaustion");
   }
 
   return {
@@ -501,6 +528,12 @@ function activateProfile(registry, provider, label, verification) {
     throw new Error("profile is not ready; run verification and finish every setup check");
   }
   profile.state = "active";
+}
+
+function enableVerifiedProfile(registry, provider, label) {
+  const verification = verifyProfile(provider, label);
+  activateProfile(registry, provider, label, verification);
+  return verification;
 }
 
 function setupCommands(provider, label, registry = defaultRegistry()) {
@@ -779,6 +812,7 @@ function usage() {
   account-fleet.mjs
   account-fleet.mjs --snapshot [--live]
   account-fleet.mjs --add codex|claude default|accountN
+  account-fleet.mjs --enable codex|claude default|accountN
   account-fleet.mjs --promote codex|claude default|accountN
   account-fleet.mjs --retire codex|claude default|accountN
   account-fleet.mjs --remove codex|claude default|accountN
@@ -804,6 +838,7 @@ function runCommandLine(args) {
   const [operation, provider, label] = args;
   if (!provider || !label) throw new Error("operation requires a provider and value");
   if (operation === "--add") addProfile(registry, provider, label);
+  else if (operation === "--enable") enableVerifiedProfile(registry, provider, label);
   else if (operation === "--promote") promoteProfile(registry, provider, label);
   else if (operation === "--retire") retireProfile(registry, provider, label);
   else if (operation === "--remove") removeProfile(registry, provider, label);
@@ -833,6 +868,7 @@ export {
   activateProfile,
   addProfile,
   defaultRegistry,
+  enableVerifiedProfile,
   profilePaths,
   promoteProfile,
   readRegistry,

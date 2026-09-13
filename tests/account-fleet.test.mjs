@@ -10,6 +10,7 @@ import {
   activateProfile,
   addProfile,
   defaultRegistry,
+  enableVerifiedProfile,
   launchFirstMateTab,
   openPiLogin,
   promoteProfile,
@@ -39,6 +40,7 @@ function withIsolatedEnvironment(callback) {
     "FM_TEST_AGENT_PRESENT",
     "FM_TEST_AGENT_STATUS",
     "FM_TEST_FIRSTMATE_HOME",
+    "FM_TEST_PLUGIN_CONFIG_DIR",
   ];
   const previous = Object.fromEntries(
     environmentKeys.map((key) => [key, process.env[key]]),
@@ -83,6 +85,13 @@ case "$1:$2" in
   integration:status)
     printf '%s\\n' "codex: current (v8) (/tmp/codex-hook)" "claude: current (v8) (/tmp/claude-hook)"
     ;;
+  plugin:config-dir)
+    if [ -n "\${FM_TEST_PLUGIN_CONFIG_DIR:-}" ]; then
+      printf '%s\\n' "$FM_TEST_PLUGIN_CONFIG_DIR"
+    else
+      exit 2
+    fi
+    ;;
   tab:create)
     printf '%s\\n' '{"id":"test","result":{"type":"tab_created","tab":{"tab_id":"w1:t2"},"root_pane":{"pane_id":"w1:p2"}}}'
     ;;
@@ -105,7 +114,7 @@ esac`,
   );
   executable(
     path.join(bin, "quota-axi"),
-    'printf "%s\\n" \'{"providers":[{"state":{"status":"fresh","stale":false},"quotaAmount":99}]}\'; exit 0',
+    'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"codex","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":80,"runway":{"status":"through_reset"}}]}},{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":80,"runway":{"status":"through_reset"}}]}}]}\'; exit 0',
   );
 }
 
@@ -114,6 +123,23 @@ test("defaults to one active primary profile per provider", () => {
     const registry = readRegistry();
     assert.deepEqual(registry, defaultRegistry());
     assert.equal(fs.existsSync(process.env.FM_ACCOUNT_FLEET_CONFIG), false);
+  });
+});
+
+test("host CLI discovers the same Herdr plugin registry used by the UI", () => {
+  withIsolatedEnvironment((home) => {
+    installFakeTools(home);
+    delete process.env.FM_ACCOUNT_FLEET_CONFIG;
+    const pluginConfig = path.join(home, "herdr-plugin-config");
+    process.env.FM_TEST_PLUGIN_CONFIG_DIR = pluginConfig;
+
+    writeRegistry(defaultRegistry());
+
+    assert.equal(fs.existsSync(path.join(pluginConfig, "accounts.json")), true);
+    assert.equal(
+      fs.existsSync(path.join(home, ".config", "firstmate-multi-harness", "accounts.json")),
+      false,
+    );
   });
 });
 
@@ -140,6 +166,37 @@ test("supports planned, active, promoted, retired, and forgotten lifecycle", () 
     writeRegistry(registry);
     assert.deepEqual(readRegistry(), registry);
     assert.equal(fs.statSync(process.env.FM_ACCOUNT_FLEET_CONFIG).mode & 0o777, 0o600);
+  });
+});
+
+test("command-line enable verifies readiness before activating a planned profile", () => {
+  withIsolatedEnvironment((home) => {
+    installFakeTools(home);
+    fs.mkdirSync(path.join(home, ".codex"), { recursive: true });
+    const registry = defaultRegistry();
+    addProfile(registry, "codex", "default");
+
+    const verification = enableVerifiedProfile(registry, "codex", "default");
+    assert.equal(verification.ready, true);
+    assert.equal(
+      registry.providers.codex.profiles.find((profile) => profile.label === "default")?.state,
+      "active",
+    );
+
+    installReadyFixtures(home, "claude", 2);
+    executable(
+      path.join(home, "bin", "quota-axi"),
+      'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"unknown","effectivePercentRemaining":null,"runway":{"status":"unknown"}}]}}]}\'; exit 0',
+    );
+    addProfile(registry, "claude", "account2");
+    assert.throws(
+      () => enableVerifiedProfile(registry, "claude", "account2"),
+      /profile is not ready/,
+    );
+    assert.equal(
+      registry.providers.claude.profiles.find((profile) => profile.label === "account2")?.state,
+      "planned",
+    );
   });
 });
 

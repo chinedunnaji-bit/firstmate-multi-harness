@@ -1,6 +1,6 @@
 id = "firstmate.account-fleet"
 name = "FirstMate Account Fleet"
-version = "0.4.0"
+version = "0.4.1"
 min_herdr_version = "0.8.2"
 description = "Launch FirstMate and manage sanitized same-provider account routing plus project catalogs"
 platforms = ["macos"]

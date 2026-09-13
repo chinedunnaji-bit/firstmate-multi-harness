@@ -43,6 +43,13 @@ printf '%s\n' \
 The file mode is `0600`. It contains no vendor identity, token, password,
 quota amount, or credential path contents.
 
+The host-terminal CLI discovers this same directory with `herdr plugin
+config-dir` before falling back to
+`$HOME/.config/firstmate-multi-harness/accounts.json`. Set
+`FM_ACCOUNT_FLEET_CONFIG` only when deliberately operating on another registry,
+such as an isolated test fixture. This keeps `--add`, `--enable`, `--promote`,
+`--retire`, and the Herdr UI on one source of truth.
+
 ## Install and open
 
 Link the reviewed local plugin from the setup repository:
@@ -177,6 +184,19 @@ The command view also includes the tested `gh-axi`, `chrome-devtools-axi`, and
 
 Adding Codex and Claude accounts is independent; account numbers do not need to
 match.
+
+For automation after a planned row has been added, the command-line equivalent
+of `v` followed by `e` is verification-gated:
+
+```sh
+node plugins/account-fleet/account-fleet.mjs --enable codex default
+```
+
+It refuses unless the wrapper, directory, vendor login, Herdr integration, and
+strict quota checks all pass. The quota gate requires schema-v5 fresh evidence,
+known positive effective availability, and either `through_reset` or advisory
+`projected_exhaustion` runway; a merely fresh but unmeasurable report is not
+enough.
 
 Once a row is active, it is eligible for new tasks and controlled relaunches in
 that provider. The router prefers the primary while it is healthy, keeps a

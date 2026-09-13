@@ -216,19 +216,21 @@ or Claude worker spawn or controlled relaunch it:
 2. asks `quota-axi --json --no-credential-refresh` separately under each
    profile directory;
 3. requires schema version 5, a fresh non-stale provider report, known
-   all-model availability, and usable runway;
+   all-model availability, and measurable runway;
 4. keeps an existing healthy task lease so a long task does not oscillate;
 5. otherwise prefers the configured primary;
 6. if the primary is exhausted or below an explicit captain floor, ranks usable
    same-provider alternates by known `selection.spendPriority`;
-7. refuses stale, unknown, projected-exhaustion, unrankable, tied, or
+7. treats projected exhaustion as advisory while remaining quota is above the
+   captain's floor, and refuses stale, unknown, unrankable, tied, or
    all-exhausted choices;
 8. returns only the selector name, profile label, directory, reason, and
    sanitized capacity evidence.
 
-The default captain floor is `0%`. This means provider-reported exhaustion is
-actionable without inventing a generic percentage. Set a non-zero floor only as
-an explicit local policy:
+The default captain floor is `0%`. This means a profile remains eligible while
+it has quota, even when its current cycle-average pace projects exhaustion
+before reset. Provider-reported exhaustion triggers rotation; set a non-zero
+floor only as an explicit earlier-switch policy:
 
 ```sh
 node plugins/account-fleet/account-fleet.mjs --threshold codex 15

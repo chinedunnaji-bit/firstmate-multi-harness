@@ -116,6 +116,13 @@ Then reopen Account Fleet, select the new provider row, press `v`, and press
 eligible for the already-installed same-provider router. No dispatch JSON
 change is needed.
 
+The equivalent noninteractive activation command performs the same live
+readiness gate and refuses an incomplete profile:
+
+```sh
+node plugins/account-fleet/account-fleet.mjs --enable codex account2
+```
+
 Fixture tests prove automatic selection before a live second account exists:
 
 ```sh

@@ -1764,3 +1764,44 @@ Actual result: the publication checker reported zero failures, HTTPS push
 succeeded, and local `main` began tracking `origin/main`. Final remote
 verification with `gh repo view` reported `visibility=PUBLIC`, `isEmpty=false`,
 and default branch `main`.
+
+### Live Codex relaunch refused on projected exhaustion
+
+Goal: explain why FirstMate refused to relaunch the existing Codex fleet even
+though account1 was not reported as exhausted yet.
+
+The first diagnostic selector invocation ran from a shell whose PATH did not
+contain the audited Node 22 NVM bin directory and returned:
+
+```text
+account-router: codex account routing stopped (no_usable_profile); account1:quota_probe_failed
+```
+
+Root cause for that diagnostic-only result: `quota-axi` was not found in that
+shell. Re-running the strict read-only probe with the same Node 22 PATH used by
+the verified stack returned sanitized current evidence:
+
+```text
+schemaVersion: 5
+state: fresh
+stale: false
+effective scope: all_models
+availability: known
+runway: projected_exhaustion
+```
+
+Installed quota-axi documentation defines `projected_exhaustion` as measurable
+cycle-average usage projecting that at least one authoritative quota window will
+empty before its own reset. It is completion-risk evidence, not a claim that the
+account is already at zero.
+
+The current account router deliberately makes that state ineligible because a
+generic selector does not know a worker's remaining task duration. Account Fleet
+currently has only Codex account1 active, so no same-provider alternate exists.
+A controlled relaunch would therefore stop the old process and fail before
+starting its replacement, while preserving its worktree and task record.
+
+No routing change was made during diagnosis. The immediate operator choices are
+to leave the fleet untouched, explicitly disable automatic Codex routing to use
+the primary without a quota gate, add a verified Codex alternate, or change the
+router policy so projection is advisory until a configured threshold is crossed.

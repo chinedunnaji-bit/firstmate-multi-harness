@@ -162,7 +162,8 @@ Verification retains only booleans for:
 - isolated profile directory exists;
 - vendor CLI reports an authenticated session;
 - selected Herdr integration reports `current`;
-- strict `quota-axi --no-credential-refresh` evidence is fresh.
+- strict `quota-axi --no-credential-refresh` evidence passes the activation
+  quota gate described under [Add an account](#add-an-account).
 
 Command stdout and stderr are never rendered. In particular, the UI does not
 show account identity, quota amounts, auth JSON, Keychain content, or raw quota

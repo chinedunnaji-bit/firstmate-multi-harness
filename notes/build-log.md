@@ -1805,3 +1805,97 @@ No routing change was made during diagnosis. The immediate operator choices are
 to leave the fleet untouched, explicitly disable automatic Codex routing to use
 the primary without a quota gate, add a verified Codex alternate, or change the
 router policy so projection is advisory until a configured threshold is crossed.
+
+### Projected exhaustion changed from a hard stop to an advisory
+
+The captain clarified the intended fleet policy: continue using an account
+until it is actually exhausted, or until it crosses a non-zero floor the captain
+explicitly configured, then rotate among active accounts in the same provider.
+
+Root cause: the first router implementation promoted quota-axi's completion-risk
+forecast into an unconditional availability gate. A live fresh Codex account
+still had known remaining capacity, but its weekly cycle-average pace produced
+`projected_exhaustion`; the router therefore refused even a short new task. That
+was stricter than the requested exhaustion-based rotation policy.
+
+Resolution: keep the runway evidence visible but classify both `through_reset`
+and `projected_exhaustion` as ready while remaining capacity is above the
+configured floor. `exhausted_now`, zero remaining, the explicit floor, stale or
+unknown evidence, and unsupported runway states retain their fail-closed
+behavior. Same-provider and no-cross-provider rules are unchanged.
+
+The follow-up live no-lease selection returned `harness=codex`,
+`profile=account1`, `status=ready`, and retained
+`runway=projected_exhaustion` as advisory evidence. Account Fleet also gained a
+verification-gated `--enable` command so an already planned profile can be made
+active noninteractively only after its wrapper, directory, authentication,
+Herdr integration, and quota checks all pass.
+
+The first activation implementation treated a fresh provider-level quota state
+as sufficient even when effective all-model availability or runway was unknown.
+A live selector check exposed that mismatch. The activation gate was tightened
+to require quota schema v5, a fresh non-stale provider report, known positive
+effective availability, and a supported `through_reset` or advisory
+`projected_exhaustion` runway. The router still rechecks every active profile at
+each selection, so a transiently unmeasurable alternate cannot receive work.
+
+During that investigation, the bare Codex `default` row was added and activated
+under the first, weaker gate in the standalone host registry. The tightened
+live view then correctly showed its quota check as false because effective
+availability was unknown. The row was retired immediately; its profile
+directory and authentication data were not modified. The active Herdr registry
+continued to contain only account1 for Codex and account1 for Claude. No worker
+was stopped or relaunched.
+
+The audit also found that the Account Fleet pane used Herdr's plugin config
+directory while a direct host-terminal invocation initially fell back to a
+separate repository-specific config directory. The launcher already discovered
+Herdr's directory, but lifecycle CLI commands could otherwise update the wrong
+registry. `configPath()` now asks the installed, documented command for the
+shared directory when no explicit environment override exists:
+
+```sh
+herdr plugin config-dir firstmate.account-fleet
+```
+
+The installed command returned the expected plugin config directory. A new
+isolated regression proves that host CLI writes resolve there and do not create
+the fallback file. The combined account/router/project test total is now 28.
+
+An attempted verification command named
+`./scripts/verify-account-router.sh` failed with `no such file or directory`;
+that script does not exist. Router tests are intentionally part of
+`./scripts/verify-account-ui.sh`. Its first restricted automation run could not
+read Herdr's external plugin registry and misleadingly reported the plugin as
+unlinked; direct diagnosis returned `Operation not permitted`. Re-running the
+same read-only check with access to the Herdr registry confirmed Account Fleet
+0.4.1 was linked and enabled.
+
+Final verification used the audited Node 22 PATH. All prerequisite, harness,
+Herdr integration, FirstMate patch, and Account Fleet groups passed. A live
+no-lease Codex selection then returned account1 as `ready` and
+`primary_healthy` with 78% effective capacity at that instant, while preserving
+`projected_exhaustion` as advisory evidence. The percentage is a volatile
+observation, not a documented installation constant.
+
+### No Mistakes gate initialization
+
+Goal: run the requested public-push validation through the installed No
+Mistakes gate.
+
+The initial read-only home command returned:
+
+```text
+error: repo not initialized (run 'no-mistakes init' first)
+```
+
+After verifying the installed command's help, the repository was initialized:
+
+```sh
+no-mistakes init
+```
+
+Actual result: No Mistakes created its local bare validation gate and added the
+repository-local `no-mistakes` remote. It did not change tracked files. The
+installed v1.60.2 command also advertised v1.72.0, but no tool update was mixed
+into this routing-policy change.

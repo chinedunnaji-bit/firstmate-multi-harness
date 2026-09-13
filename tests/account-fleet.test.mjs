@@ -10,6 +10,7 @@ import {
   activateProfile,
   addProfile,
   defaultRegistry,
+  enableVerifiedProfile,
   launchFirstMateTab,
   openPiLogin,
   promoteProfile,
@@ -33,12 +34,14 @@ function withIsolatedEnvironment(callback) {
     "FM_FIRSTMATE_HOME",
     "HERDR_BIN_PATH",
     "HERDR_ENV",
+    "HERDR_PLUGIN_CONFIG_DIR",
     "HERDR_PLUGIN_ROOT",
     "HERDR_WORKSPACE_ID",
     "FAKE_HERDR_LOG",
     "FM_TEST_AGENT_PRESENT",
     "FM_TEST_AGENT_STATUS",
     "FM_TEST_FIRSTMATE_HOME",
+    "FM_TEST_PLUGIN_CONFIG_DIR",
   ];
   const previous = Object.fromEntries(
     environmentKeys.map((key) => [key, process.env[key]]),
@@ -46,6 +49,8 @@ function withIsolatedEnvironment(callback) {
   process.env.HOME = temporary;
   process.env.PATH = `${path.join(temporary, "bin")}:${previous.PATH ?? ""}`;
   process.env.FM_ACCOUNT_FLEET_CONFIG = path.join(temporary, "config", "accounts.json");
+  delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  delete process.env.HERDR_BIN_PATH;
   fs.mkdirSync(path.join(temporary, "bin"), { recursive: true });
 
   try {
@@ -83,6 +88,13 @@ case "$1:$2" in
   integration:status)
     printf '%s\\n' "codex: current (v8) (/tmp/codex-hook)" "claude: current (v8) (/tmp/claude-hook)"
     ;;
+  plugin:config-dir)
+    if [ -n "\${FM_TEST_PLUGIN_CONFIG_DIR:-}" ]; then
+      printf '%s\\n' "$FM_TEST_PLUGIN_CONFIG_DIR"
+    else
+      exit 2
+    fi
+    ;;
   tab:create)
     printf '%s\\n' '{"id":"test","result":{"type":"tab_created","tab":{"tab_id":"w1:t2"},"root_pane":{"pane_id":"w1:p2"}}}'
     ;;
@@ -105,7 +117,7 @@ esac`,
   );
   executable(
     path.join(bin, "quota-axi"),
-    'printf "%s\\n" \'{"providers":[{"state":{"status":"fresh","stale":false},"quotaAmount":99}]}\'; exit 0',
+    'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"codex","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":80,"runway":{"status":"through_reset"}}]}},{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":80,"runway":{"status":"through_reset"}}]}}]}\'; exit 0',
   );
 }
 
@@ -114,6 +126,23 @@ test("defaults to one active primary profile per provider", () => {
     const registry = readRegistry();
     assert.deepEqual(registry, defaultRegistry());
     assert.equal(fs.existsSync(process.env.FM_ACCOUNT_FLEET_CONFIG), false);
+  });
+});
+
+test("host CLI discovers the same Herdr plugin registry used by the UI", () => {
+  withIsolatedEnvironment((home) => {
+    installFakeTools(home);
+    delete process.env.FM_ACCOUNT_FLEET_CONFIG;
+    const pluginConfig = path.join(home, "herdr-plugin-config");
+    process.env.FM_TEST_PLUGIN_CONFIG_DIR = pluginConfig;
+
+    writeRegistry(defaultRegistry());
+
+    assert.equal(fs.existsSync(path.join(pluginConfig, "accounts.json")), true);
+    assert.equal(
+      fs.existsSync(path.join(home, ".config", "firstmate-multi-harness", "accounts.json")),
+      false,
+    );
   });
 });
 
@@ -140,6 +169,76 @@ test("supports planned, active, promoted, retired, and forgotten lifecycle", () 
     writeRegistry(registry);
     assert.deepEqual(readRegistry(), registry);
     assert.equal(fs.statSync(process.env.FM_ACCOUNT_FLEET_CONFIG).mode & 0o777, 0o600);
+  });
+});
+
+test("command-line enable verifies readiness before activating a planned profile", () => {
+  withIsolatedEnvironment((home) => {
+    installFakeTools(home);
+    fs.mkdirSync(path.join(home, ".codex"), { recursive: true });
+    const registry = defaultRegistry();
+    addProfile(registry, "codex", "default");
+
+    const verification = enableVerifiedProfile(registry, "codex", "default");
+    assert.equal(verification.ready, true);
+    assert.equal(
+      registry.providers.codex.profiles.find((profile) => profile.label === "default")?.state,
+      "active",
+    );
+
+    const quotaOnlyFailure = {
+      wrapper: true,
+      directory: true,
+      authenticated: true,
+      integration: true,
+      quota: false,
+    };
+    const refusedByQuota = (number, availability) => {
+      const label = `account${number}`;
+      installReadyFixtures(home, "claude", number);
+      executable(
+        path.join(home, "bin", "quota-axi"),
+        `printf "%s\\n" '${JSON.stringify({
+          schemaVersion: 5,
+          providers: [
+            {
+              provider: "claude",
+              state: { status: "fresh", stale: false },
+              quotaSemantics: { effectiveAvailability: [availability] },
+            },
+          ],
+        })}'; exit 0`,
+      );
+      addProfile(registry, "claude", label);
+      assert.deepEqual(verifyProfile("claude", label).checks, quotaOnlyFailure);
+      assert.throws(
+        () => enableVerifiedProfile(registry, "claude", label),
+        /profile is not ready/,
+      );
+      assert.equal(
+        registry.providers.claude.profiles.find((profile) => profile.label === label)?.state,
+        "planned",
+      );
+    };
+
+    refusedByQuota(2, {
+      scope: "all_models",
+      status: "unknown",
+      effectivePercentRemaining: null,
+      runway: { status: "unknown" },
+    });
+    refusedByQuota(3, {
+      scope: "all_models",
+      status: "known",
+      effectivePercentRemaining: 0,
+      runway: { status: "through_reset" },
+    });
+    refusedByQuota(4, {
+      scope: "all_models",
+      status: "known",
+      effectivePercentRemaining: 40,
+      runway: { status: "exhausted_now" },
+    });
   });
 });
 

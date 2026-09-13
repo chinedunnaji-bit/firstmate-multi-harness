@@ -224,14 +224,13 @@ function evaluateProfile(provider, profile, thresholdPercent) {
   };
   if (runway === "exhausted_now" || remaining <= 0) return { ...evidence, status: "exhausted" };
   if (remaining <= thresholdPercent) return { ...evidence, status: "low" };
-  // A generic selector has no evidence for this task's completion horizon.
-  // Treat projected exhaustion as ineligible for unattended routing instead
-  // of guessing that the remaining runway will be long enough.
-  if (runway === "projected_exhaustion") {
-    return { ...evidence, status: "projected_exhaustion" };
-  }
   if (runway === "unknown") return { ...evidence, status: "runway_unknown" };
-  if (runway !== "through_reset") return { ...evidence, status: "runway_unsupported" };
+  // Projected exhaustion is advisory: it says the current cycle-average burn
+  // would reach zero before reset, not that the profile is unavailable now.
+  // Rotation is owned by actual exhaustion or the captain's explicit floor.
+  if (runway !== "through_reset" && runway !== "projected_exhaustion") {
+    return { ...evidence, status: "runway_unsupported" };
+  }
   return { ...evidence, status: "ready" };
 }
 

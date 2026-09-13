@@ -186,17 +186,18 @@ test("fails closed on ties, stale evidence, and exhausted single-account provide
   });
 });
 
-test("fails closed on projected exhaustion because task horizon is unknown", () => {
+test("keeps projected exhaustion eligible until the explicit quota floor is crossed", () => {
   withIsolatedEnvironment((home) => {
     writeRegistry(defaultRegistry());
     quotaFixture(home, "codex", "account1", {
       remaining: 50,
       runway: "projected_exhaustion",
     });
-    assert.throws(
-      () => selectAccount({ provider: "codex", taskId: "task-runway" }),
-      /account1:projected_exhaustion/,
-    );
+    const result = selectAccount({ provider: "codex", taskId: "task-runway" });
+    assert.equal(result.profile, "account1");
+    assert.equal(result.reason, "primary_healthy");
+    assert.equal(result.evidence[0].status, "ready");
+    assert.equal(result.evidence[0].runway, "projected_exhaustion");
   });
 });
 

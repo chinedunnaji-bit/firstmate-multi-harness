@@ -29,7 +29,7 @@ Audited on Apple Silicon macOS 26.3 through 2026-09-12:
   profile pairs;
 - the account wrappers preserve arguments and select their intended profile;
 - `quota-axi` returned separate profile-scoped results;
-- Herdr accepted the Account Fleet plugin manifest, its 26 isolated account,
+- Herdr accepted the Account Fleet plugin manifest, its 28 isolated account,
   router, project discovery, lifecycle, approval, and redaction tests pass, and
   both primary profiles passed its sanitized live readiness view in the earlier
   documented NVM-shell audit;

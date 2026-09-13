@@ -51,6 +51,15 @@ function configPath() {
   if (process.env.HERDR_PLUGIN_CONFIG_DIR) {
     return path.join(process.env.HERDR_PLUGIN_CONFIG_DIR, "accounts.json");
   }
+  const herdr = spawnSync(
+    process.env.HERDR_BIN_PATH || "herdr",
+    ["plugin", "config-dir", "firstmate.account-fleet"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const pluginConfigDirectory = herdr.status === 0 ? herdr.stdout.trim() : "";
+  if (pluginConfigDirectory) {
+    return path.join(pluginConfigDirectory, "accounts.json");
+  }
   return path.join(
     os.homedir(),
     ".config",
@@ -117,8 +126,7 @@ function validateRegistry(registry) {
   return registry;
 }
 
-function readRegistry() {
-  const file = configPath();
+function readRegistry(file = configPath()) {
   if (!fs.existsSync(file)) {
     return defaultRegistry();
   }
@@ -131,9 +139,8 @@ function readRegistry() {
   return validateRegistry(parsed);
 }
 
-function writeRegistry(registry) {
+function writeRegistry(registry, file = configPath()) {
   validateRegistry(registry);
-  const file = configPath();
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, `${JSON.stringify(registry, null, 2)}\n`, {
@@ -380,9 +387,27 @@ function verifyProfile(provider, label) {
       selector,
     );
     const quotaJson = parseJson(quota.stdout);
-    const quotaState = quotaJson?.providers?.[0]?.state;
+    const quotaReport = quotaJson?.providers?.find?.(
+      (candidate) => candidate.provider === provider,
+    );
+    const quotaState = quotaReport?.state;
+    const availability = quotaReport?.quotaSemantics?.effectiveAvailability;
+    const scope = Array.isArray(availability)
+      ? availability.find((candidate) => candidate.scope === "all_models") ||
+        availability.find((candidate) => candidate.scope === "all_products")
+      : null;
+    const remaining = scope?.effectivePercentRemaining;
+    const runway = scope?.runway?.status;
     checks.quota =
-      quota.status === 0 && quotaState?.status === "fresh" && quotaState?.stale === false;
+      quota.status === 0 &&
+      quotaJson?.schemaVersion === 5 &&
+      quotaState?.status === "fresh" &&
+      quotaState?.stale === false &&
+      scope?.status === "known" &&
+      typeof remaining === "number" &&
+      Number.isFinite(remaining) &&
+      remaining > 0 &&
+      (runway === "through_reset" || runway === "projected_exhaustion");
   }
 
   return {
@@ -501,6 +526,12 @@ function activateProfile(registry, provider, label, verification) {
     throw new Error("profile is not ready; run verification and finish every setup check");
   }
   profile.state = "active";
+}
+
+function enableVerifiedProfile(registry, provider, label) {
+  const verification = verifyProfile(provider, label);
+  activateProfile(registry, provider, label, verification);
+  return verification;
 }
 
 function setupCommands(provider, label, registry = defaultRegistry()) {
@@ -653,11 +684,11 @@ async function promptLine(question) {
   }
 }
 
-async function showCommands(provider, label) {
+async function showCommands(provider, label, file) {
   process.stdout.write(ANSI.clear);
   process.stdout.write(`${ANSI.bold}Setup commands for ${provider} ${label}${ANSI.reset}\n\n`);
   process.stdout.write("Run these from the repository root in a normal terminal:\n\n");
-  setupCommands(provider, label, readRegistry()).forEach((command) =>
+  setupCommands(provider, label, readRegistry(file)).forEach((command) =>
     process.stdout.write(`${command}\n`),
   );
   process.stdout.write("\nNo credential data is entered into Account Fleet.\n");
@@ -665,7 +696,8 @@ async function showCommands(provider, label) {
 }
 
 async function interactive() {
-  let registry = readRegistry();
+  const file = configPath();
+  let registry = readRegistry(file);
   let selected = 0;
   let message = "";
   const verification = new Map();
@@ -704,21 +736,21 @@ async function interactive() {
         const value = (await promptLine("Profile (default or account number): ")).toLowerCase();
         const label = value === "default" ? "default" : `account${value}`;
         addProfile(registry, provider, label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${provider} ${label} added as planned; press c for setup commands.`;
       } else if (key === "e" && current) {
         const result = verifyProfile(current.provider, current.label);
         verification.set(`${current.provider}:${current.label}`, result);
         activateProfile(registry, current.provider, current.label, result);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} ${current.label} is active.`;
       } else if (key === "p" && current) {
         promoteProfile(registry, current.provider, current.label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} ${current.label} is now primary.`;
       } else if (key === "r" && current) {
         retireProfile(registry, current.provider, current.label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = "Retired from routing only; local login and profile files were not changed.";
       } else if (key === "x" && current) {
         const confirmation = await promptLine(
@@ -728,22 +760,22 @@ async function interactive() {
           message = "Forget cancelled.";
         } else {
           removeProfile(registry, current.provider, current.label);
-          writeRegistry(registry);
+          writeRegistry(registry, file);
           verification.delete(`${current.provider}:${current.label}`);
           message = "Registry entry removed; wrapper, login, and profile directory remain untouched.";
         }
       } else if (key === "c" && current) {
-        await showCommands(current.provider, current.label);
+        await showCommands(current.provider, current.label, file);
       } else if (key === "a" && current) {
         setRoutingEnabled(registry, current.provider, !current.routing.enabled);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} automatic same-provider routing is ${registry.providers[current.provider].routing.enabled ? "on" : "off"}.`;
       } else if (key === "t" && current) {
         const percent = await promptLine(
           "Switch when remaining quota is at or below percent (0-100): ",
         );
         setLowQuotaPercent(registry, current.provider, percent);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} quota floor set to ${registry.providers[current.provider].routing.lowQuotaPercent}%.`;
       } else if (key === "l" || key === "L") {
         const confirmation = await promptLine(
@@ -779,6 +811,7 @@ function usage() {
   account-fleet.mjs
   account-fleet.mjs --snapshot [--live]
   account-fleet.mjs --add codex|claude default|accountN
+  account-fleet.mjs --enable codex|claude default|accountN
   account-fleet.mjs --promote codex|claude default|accountN
   account-fleet.mjs --retire codex|claude default|accountN
   account-fleet.mjs --remove codex|claude default|accountN
@@ -796,7 +829,8 @@ function runCommandLine(args) {
     usage();
     return true;
   }
-  const registry = readRegistry();
+  const file = configPath();
+  const registry = readRegistry(file);
   if (args[0] === "--snapshot") {
     process.stdout.write(`${JSON.stringify(sanitizedSnapshot(registry, args.includes("--live")), null, 2)}\n`);
     return true;
@@ -804,6 +838,7 @@ function runCommandLine(args) {
   const [operation, provider, label] = args;
   if (!provider || !label) throw new Error("operation requires a provider and value");
   if (operation === "--add") addProfile(registry, provider, label);
+  else if (operation === "--enable") enableVerifiedProfile(registry, provider, label);
   else if (operation === "--promote") promoteProfile(registry, provider, label);
   else if (operation === "--retire") retireProfile(registry, provider, label);
   else if (operation === "--remove") removeProfile(registry, provider, label);
@@ -812,7 +847,7 @@ function runCommandLine(args) {
     setRoutingEnabled(registry, provider, label === "on");
   } else if (operation === "--threshold") setLowQuotaPercent(registry, provider, label);
   else throw new Error(`unknown operation: ${operation}`);
-  writeRegistry(registry);
+  writeRegistry(registry, file);
   process.stdout.write("Account registry updated. Credential and profile files were not changed.\n");
   return true;
 }
@@ -833,6 +868,7 @@ export {
   activateProfile,
   addProfile,
   defaultRegistry,
+  enableVerifiedProfile,
   profilePaths,
   promoteProfile,
   readRegistry,

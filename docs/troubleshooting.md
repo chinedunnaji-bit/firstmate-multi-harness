@@ -345,7 +345,7 @@ is detected.
 ```sh
 ./scripts/verify-account-ui.sh
 herdr plugin list --plugin firstmate.account-fleet --json \
-  | jq -e '.result.plugins[0].version == "0.4.0"'
+  | jq -e '.result.plugins[0].version == "0.4.1"'
 ```
 
 The launch regression uses a fake `pane run` that exits successfully with
@@ -422,9 +422,11 @@ watcher wakes keep pointing at the same failed pane.
 
 ### Why it happens
 
-The router intentionally refuses to interpret stale, unknown, tied,
-projected-exhaustion, or exhausted evidence as capacity. Before this router was
-wired into `fm-spawn`, an existing Codex task also retained only
+The router intentionally refuses to interpret stale, unknown, tied, or
+exhausted evidence as capacity. Projected exhaustion is advisory in the current
+version: it becomes a switch condition only if the remaining percentage also
+crosses the captain's configured floor. Before this router was wired into
+`fm-spawn`, an existing Codex task also retained only
 `harness=codex`; a relaunch had no mechanism to select `codex1` or another
 Codex profile. Watcher repetition described the same blocked worker—it did not
 create a safe cross-provider fallback.
@@ -453,9 +455,10 @@ setup, verify it in Account Fleet with `v`, and activate it with `e`. Preserve
 the task's worktree and use FirstMate's controlled relaunch; the replacement
 spawn keeps `harness=codex` and may select the new Codex profile.
 
-If no second same-provider account exists, wait for reset or reauthenticate the
-same profile. Do not add `claude` as a fallback for a Codex task, and do not mark
-an unverified directory active merely to suppress the error.
+If no second same-provider account exists and the profile is actually exhausted,
+wait for reset or reauthenticate the same profile. Do not add `claude` as a
+fallback for a Codex task, and do not mark an unverified directory active merely
+to suppress the error.
 
 ### Verify
 

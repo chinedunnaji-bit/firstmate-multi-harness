@@ -126,8 +126,7 @@ function validateRegistry(registry) {
   return registry;
 }
 
-function readRegistry() {
-  const file = configPath();
+function readRegistry(file = configPath()) {
   if (!fs.existsSync(file)) {
     return defaultRegistry();
   }
@@ -140,9 +139,8 @@ function readRegistry() {
   return validateRegistry(parsed);
 }
 
-function writeRegistry(registry) {
+function writeRegistry(registry, file = configPath()) {
   validateRegistry(registry);
-  const file = configPath();
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, `${JSON.stringify(registry, null, 2)}\n`, {
@@ -686,11 +684,11 @@ async function promptLine(question) {
   }
 }
 
-async function showCommands(provider, label) {
+async function showCommands(provider, label, file) {
   process.stdout.write(ANSI.clear);
   process.stdout.write(`${ANSI.bold}Setup commands for ${provider} ${label}${ANSI.reset}\n\n`);
   process.stdout.write("Run these from the repository root in a normal terminal:\n\n");
-  setupCommands(provider, label, readRegistry()).forEach((command) =>
+  setupCommands(provider, label, readRegistry(file)).forEach((command) =>
     process.stdout.write(`${command}\n`),
   );
   process.stdout.write("\nNo credential data is entered into Account Fleet.\n");
@@ -698,7 +696,8 @@ async function showCommands(provider, label) {
 }
 
 async function interactive() {
-  let registry = readRegistry();
+  const file = configPath();
+  let registry = readRegistry(file);
   let selected = 0;
   let message = "";
   const verification = new Map();
@@ -737,21 +736,21 @@ async function interactive() {
         const value = (await promptLine("Profile (default or account number): ")).toLowerCase();
         const label = value === "default" ? "default" : `account${value}`;
         addProfile(registry, provider, label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${provider} ${label} added as planned; press c for setup commands.`;
       } else if (key === "e" && current) {
         const result = verifyProfile(current.provider, current.label);
         verification.set(`${current.provider}:${current.label}`, result);
         activateProfile(registry, current.provider, current.label, result);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} ${current.label} is active.`;
       } else if (key === "p" && current) {
         promoteProfile(registry, current.provider, current.label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} ${current.label} is now primary.`;
       } else if (key === "r" && current) {
         retireProfile(registry, current.provider, current.label);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = "Retired from routing only; local login and profile files were not changed.";
       } else if (key === "x" && current) {
         const confirmation = await promptLine(
@@ -761,22 +760,22 @@ async function interactive() {
           message = "Forget cancelled.";
         } else {
           removeProfile(registry, current.provider, current.label);
-          writeRegistry(registry);
+          writeRegistry(registry, file);
           verification.delete(`${current.provider}:${current.label}`);
           message = "Registry entry removed; wrapper, login, and profile directory remain untouched.";
         }
       } else if (key === "c" && current) {
-        await showCommands(current.provider, current.label);
+        await showCommands(current.provider, current.label, file);
       } else if (key === "a" && current) {
         setRoutingEnabled(registry, current.provider, !current.routing.enabled);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} automatic same-provider routing is ${registry.providers[current.provider].routing.enabled ? "on" : "off"}.`;
       } else if (key === "t" && current) {
         const percent = await promptLine(
           "Switch when remaining quota is at or below percent (0-100): ",
         );
         setLowQuotaPercent(registry, current.provider, percent);
-        writeRegistry(registry);
+        writeRegistry(registry, file);
         message = `${current.provider} quota floor set to ${registry.providers[current.provider].routing.lowQuotaPercent}%.`;
       } else if (key === "l" || key === "L") {
         const confirmation = await promptLine(
@@ -830,7 +829,8 @@ function runCommandLine(args) {
     usage();
     return true;
   }
-  const registry = readRegistry();
+  const file = configPath();
+  const registry = readRegistry(file);
   if (args[0] === "--snapshot") {
     process.stdout.write(`${JSON.stringify(sanitizedSnapshot(registry, args.includes("--live")), null, 2)}\n`);
     return true;
@@ -847,7 +847,7 @@ function runCommandLine(args) {
     setRoutingEnabled(registry, provider, label === "on");
   } else if (operation === "--threshold") setLowQuotaPercent(registry, provider, label);
   else throw new Error(`unknown operation: ${operation}`);
-  writeRegistry(registry);
+  writeRegistry(registry, file);
   process.stdout.write("Account registry updated. Credential and profile files were not changed.\n");
   return true;
 }

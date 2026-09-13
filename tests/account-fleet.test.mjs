@@ -50,6 +50,7 @@ function withIsolatedEnvironment(callback) {
   process.env.PATH = `${path.join(temporary, "bin")}:${previous.PATH ?? ""}`;
   process.env.FM_ACCOUNT_FLEET_CONFIG = path.join(temporary, "config", "accounts.json");
   delete process.env.HERDR_PLUGIN_CONFIG_DIR;
+  delete process.env.HERDR_BIN_PATH;
   fs.mkdirSync(path.join(temporary, "bin"), { recursive: true });
 
   try {
@@ -185,35 +186,59 @@ test("command-line enable verifies readiness before activating a planned profile
       "active",
     );
 
-    installReadyFixtures(home, "claude", 2);
-    executable(
-      path.join(home, "bin", "quota-axi"),
-      'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"unknown","effectivePercentRemaining":null,"runway":{"status":"unknown"}}]}}]}\'; exit 0',
-    );
-    addProfile(registry, "claude", "account2");
-    assert.throws(
-      () => enableVerifiedProfile(registry, "claude", "account2"),
-      /profile is not ready/,
-    );
-    assert.equal(
-      registry.providers.claude.profiles.find((profile) => profile.label === "account2")?.state,
-      "planned",
-    );
+    const quotaOnlyFailure = {
+      wrapper: true,
+      directory: true,
+      authenticated: true,
+      integration: true,
+      quota: false,
+    };
+    const refusedByQuota = (number, availability) => {
+      const label = `account${number}`;
+      installReadyFixtures(home, "claude", number);
+      executable(
+        path.join(home, "bin", "quota-axi"),
+        `printf "%s\\n" '${JSON.stringify({
+          schemaVersion: 5,
+          providers: [
+            {
+              provider: "claude",
+              state: { status: "fresh", stale: false },
+              quotaSemantics: { effectiveAvailability: [availability] },
+            },
+          ],
+        })}'; exit 0`,
+      );
+      addProfile(registry, "claude", label);
+      assert.deepEqual(verifyProfile("claude", label).checks, quotaOnlyFailure);
+      assert.throws(
+        () => enableVerifiedProfile(registry, "claude", label),
+        /profile is not ready/,
+      );
+      assert.equal(
+        registry.providers.claude.profiles.find((profile) => profile.label === label)?.state,
+        "planned",
+      );
+    };
 
-    installReadyFixtures(home, "claude", 3);
-    executable(
-      path.join(home, "bin", "quota-axi"),
-      'printf "%s\\n" \'{"schemaVersion":5,"providers":[{"provider":"claude","state":{"status":"fresh","stale":false},"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","status":"known","effectivePercentRemaining":0,"runway":{"status":"exhausted_now"}}]}}]}\'; exit 0',
-    );
-    addProfile(registry, "claude", "account3");
-    assert.throws(
-      () => enableVerifiedProfile(registry, "claude", "account3"),
-      /profile is not ready/,
-    );
-    assert.equal(
-      registry.providers.claude.profiles.find((profile) => profile.label === "account3")?.state,
-      "planned",
-    );
+    refusedByQuota(2, {
+      scope: "all_models",
+      status: "unknown",
+      effectivePercentRemaining: null,
+      runway: { status: "unknown" },
+    });
+    refusedByQuota(3, {
+      scope: "all_models",
+      status: "known",
+      effectivePercentRemaining: 0,
+      runway: { status: "through_reset" },
+    });
+    refusedByQuota(4, {
+      scope: "all_models",
+      status: "known",
+      effectivePercentRemaining: 40,
+      runway: { status: "exhausted_now" },
+    });
   });
 });
 
